@@ -23,6 +23,7 @@ struct DatabaseHeader
     int magic;
     int version;
     long long numRows;
+    int rowSize; // must match sizeof(User) for THIS build
 };
 
 constexpr int DATABASE_MAGIC = 0x41525944;

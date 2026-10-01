@@ -2,9 +2,43 @@
 
 #include <cstring>
 #include <iostream>
+#include <stdexcept>
+
+#if defined(_WIN32)
+    #include <direct.h>
+    #define MKDIR(path) _mkdir(path)
+#else
+    #include <sys/stat.h>
+    #define MKDIR(path) mkdir(path, 0755)
+#endif
+
+// Creates the parent directory of `filename` if it doesn't exist.
+// Doesn't need <filesystem>, so it works with older compilers too.
+static void ensureParentDirectoryExists(const std::string& filename)
+{
+    std::size_t lastSlash = filename.find_last_of("/\\");
+
+    if (lastSlash == std::string::npos)
+    {
+        return; // no parent directory in the path, nothing to do
+    }
+
+    std::string dir = filename.substr(0, lastSlash);
+
+    if (dir.empty())
+    {
+        return;
+    }
+
+    // MKDIR fails harmlessly if the directory already exists -
+    // we only care about failing to open the file afterward.
+    MKDIR(dir.c_str());
+}
 
 Pager::Pager(const std::string& filename)
 {
+    ensureParentDirectoryExists(filename);
+
     file.open(
         filename,
         std::ios::in |
@@ -34,7 +68,9 @@ Pager::Pager(const std::string& filename)
 
     if (!file.is_open())
     {
-        std::cerr << "Error: could not open database file.\n";
+        throw std::runtime_error(
+            "Could not open database file: " + filename
+        );
     }
 }
 

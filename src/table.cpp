@@ -54,6 +54,21 @@ void Table::loadMetadata()
         return;
     }
 
+    if (header.rowSize != ROW_SIZE)
+    {
+        std::cerr
+            << "Error: this database file was written by a "
+            << "different version of the row layout "
+            << "(stored rowSize=" << header.rowSize
+            << ", current ROW_SIZE=" << ROW_SIZE << ").\n"
+            << "Refusing to read it to avoid returning garbage "
+            << "data. Move/delete the old file if it's safe to "
+            << "discard, or write a migration.\n";
+
+        numRows = 0;
+        return;
+    }
+
     numRows = header.numRows;
 }
 
@@ -76,6 +91,9 @@ void Table::saveMetadata()
 
     header.numRows =
         numRows;
+
+    header.rowSize =
+        ROW_SIZE;
 
     std::memcpy(
         page,
@@ -150,6 +168,9 @@ void Table::insert(
         pageNumber);
 
     ++numRows;
+
+    saveMetadata();
+    bufferPool.flushAll();
 
     std::cout
         << "Record inserted successfully.\n";
@@ -389,6 +410,8 @@ void Table::update(
                 pageNumber
             );
 
+            bufferPool.flushAll();
+
             std::cout
                 << "Record updated successfully.\n";
 
@@ -456,6 +479,8 @@ void Table::remove(int id)
             bufferPool.markDirty(
                 pageNumber
             );
+
+            bufferPool.flushAll();
 
             std::cout
                 << "Record deleted successfully.\n";
