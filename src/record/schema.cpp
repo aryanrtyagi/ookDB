@@ -13,7 +13,7 @@ const Column& Schema::getColumn(int index) const
     return columns.at(index);
 }
 
-int Schema::columnCount() const
+int Schema::size() const
 {
     return static_cast<int>(columns.size());
 }

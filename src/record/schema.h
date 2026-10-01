@@ -16,9 +16,10 @@ public:
         DataType type
     );
 
+    int size() const;
+    
     const Column& getColumn(int index) const;
 
-    int columnCount() const;
 };
 
 #endif

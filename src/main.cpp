@@ -1,60 +1,140 @@
 #include <iostream>
-#include <string>
 
-#include "record/value.h"
-#include "record/column.h"
-#include "record/schema.h"
-#include "record/row.h"
+#include "catalog.h"
+
 
 int main()
 {
-    Schema schema;
+    Catalog catalog;
 
-    schema.addColumn("id", DataType::INT);
-    schema.addColumn("name", DataType::VARCHAR);
-    schema.addColumn("age", DataType::INT);
-    schema.addColumn("salary", DataType::DOUBLE);
 
-    std::cout << "Schema created!\n";
-    std::cout << "Number of columns: "
-              << schema.columnCount() << "\n\n";
+    // ==========================================
+    // Create students schema
+    // ==========================================
 
-    std::cout << "Table Structure:\n";
+    Schema studentsSchema;
 
-    for (int i = 0; i < schema.columnCount(); i++)
+    studentsSchema.addColumn(
+        "id",
+        DataType::INT
+    );
+
+    studentsSchema.addColumn(
+        "name",
+        DataType::VARCHAR
+    );
+
+    studentsSchema.addColumn(
+        "age",
+        DataType::INT
+    );
+
+
+    // ==========================================
+    // Create table
+    // ==========================================
+
+    bool created =
+        catalog.createTable(
+            "students",
+            studentsSchema
+        );
+
+    std::cout
+        << "Create students: "
+        << (created ? "SUCCESS" : "FAILED")
+        << "\n";
+
+
+    // ==========================================
+    // Check table
+    // ==========================================
+
+    std::cout
+        << "students exists: "
+        << (
+            catalog.tableExists("students")
+            ? "YES"
+            : "NO"
+        )
+        << "\n";
+
+
+    // ==========================================
+    // Try duplicate
+    // ==========================================
+
+    bool duplicate =
+        catalog.createTable(
+            "students",
+            studentsSchema
+        );
+
+    std::cout
+        << "Create students again: "
+        << (
+            duplicate
+            ? "SUCCESS"
+            : "REJECTED"
+        )
+        << "\n";
+
+
+    // ==========================================
+    // Create another table
+    // ==========================================
+
+    Schema employeeSchema;
+
+    employeeSchema.addColumn(
+        "id",
+        DataType::INT
+    );
+
+    employeeSchema.addColumn(
+        "name",
+        DataType::VARCHAR
+    );
+
+    employeeSchema.addColumn(
+        "salary",
+        DataType::DOUBLE
+    );
+
+
+    catalog.createTable(
+        "employees",
+        employeeSchema
+    );
+
+
+    // ==========================================
+    // List tables
+    // ==========================================
+
+    std::cout
+        << "\nTables:\n";
+
+    for (const std::string& name :
+         catalog.listTables())
     {
-        const Column& column = schema.getColumn(i);
-
-        std::cout << "Column " << i
-                  << ": "
-                  << column.getName()
-                  << "\n";
+        std::cout
+            << "- "
+            << name
+            << "\n";
     }
 
-    Row row;
 
-    row.addValue(Value(1));
-    row.addValue(Value(std::string("Aryan")));
-    row.addValue(Value(21));
-    row.addValue(Value(85000.0));
+    // ==========================================
+    // Get schema
+    // ==========================================
 
-    std::cout << "\nRow Data:\n";
+    const Schema& schema =
+        catalog.getSchema("students");
 
-    std::cout << "ID     : "
-              << row.getValue(0).asInt()
-              << "\n";
+    std::cout
+        << "\nstudents schema loaded successfully.\n";
 
-    std::cout << "Name   : "
-              << row.getValue(1).asString()
-              << "\n";
-
-    std::cout << "Age    : "
-              << row.getValue(2).asInt()
-              << "\n";
-
-    std::cout << "Salary : "
-              << row.getValue(3).asDouble()
-              << "\n";
 
     return 0;
 }
