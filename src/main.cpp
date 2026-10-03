@@ -1,11 +1,34 @@
 #include <iostream>
 
+#include "pager.h"
+#include "page_allocator.h"
 #include "catalog.h"
 
 
 int main()
 {
-    Catalog catalog;
+    // ==========================================
+    // Storage components
+    // ==========================================
+
+    Pager pager("data/database.db");
+
+    PageAllocator pageAllocator(pager);
+
+    Catalog catalog(pageAllocator);
+
+
+    // ==========================================
+    // Show page state
+    // ==========================================
+
+    std::cout
+        << "Page 0 -> RESERVED FOR CATALOG\n";
+
+    std::cout
+        << "Next available page -> "
+        << pageAllocator.getNextPageNumber()
+        << "\n\n";
 
 
     // ==========================================
@@ -31,7 +54,7 @@ int main()
 
 
     // ==========================================
-    // Create table
+    // Create students table
     // ==========================================
 
     bool created =
@@ -44,6 +67,15 @@ int main()
         << "Create students: "
         << (created ? "SUCCESS" : "FAILED")
         << "\n";
+
+
+    if (created)
+    {
+        std::cout
+            << "students -> Page "
+            << catalog.getFirstPage("students")
+            << "\n";
+    }
 
 
     // ==========================================
@@ -81,7 +113,7 @@ int main()
 
 
     // ==========================================
-    // Create another table
+    // Create employees schema
     // ==========================================
 
     Schema employeeSchema;
@@ -102,10 +134,32 @@ int main()
     );
 
 
-    catalog.createTable(
-        "employees",
-        employeeSchema
-    );
+    // ==========================================
+    // Create employees
+    // ==========================================
+
+    bool employeeCreated =
+        catalog.createTable(
+            "employees",
+            employeeSchema
+        );
+
+    std::cout
+        << "Create employees: "
+        << (
+            employeeCreated
+            ? "SUCCESS"
+            : "FAILED"
+        )
+        << "\n";
+
+    if (employeeCreated)
+    {
+        std::cout
+            << "employees -> Page "
+            << catalog.getFirstPage("employees")
+            << "\n";
+    }
 
 
     // ==========================================
@@ -123,6 +177,30 @@ int main()
             << name
             << "\n";
     }
+
+
+    // ==========================================
+    // Show final page state
+    // ==========================================
+
+    std::cout
+        << "\nPage 0 -> CATALOG\n";
+
+    for (const auto& table :
+         catalog.getTables())
+    {
+        std::cout
+            << "Page "
+            << table.firstPage
+            << " -> "
+            << table.name
+            << "\n";
+    }
+
+    std::cout
+        << "Page "
+        << pageAllocator.getNextPageNumber()
+        << " -> NEXT AVAILABLE\n";
 
 
     // ==========================================

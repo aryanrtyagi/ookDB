@@ -1,27 +1,33 @@
 #include "catalog.h"
+#include "page_allocator.h"
 
 #include <stdexcept>
 
 
-Catalog::Catalog()
+Catalog::Catalog(PageAllocator& pageAllocator)
+    : pageAllocator(pageAllocator)
 {
 }
 
 
-// ============================================================
-// Create table
-// ============================================================
-
 bool Catalog::createTable(
     const std::string& name,
-    const Schema& schema,
-    int firstPage
+    const Schema& schema
 )
 {
+    // Don't allow duplicate table names.
     if (tableExists(name))
     {
         return false;
     }
+
+    /*
+        Ask PageAllocator for the first page
+        belonging to this table.
+    */
+    int firstPage =
+        pageAllocator.allocatePage();
+
 
     TableMetadata metadata;
 
@@ -29,98 +35,85 @@ bool Catalog::createTable(
     metadata.schema = schema;
     metadata.firstPage = firstPage;
 
-    tables[name] = metadata;
+
+    tables.push_back(metadata);
 
     return true;
 }
 
 
-// ============================================================
-// Check whether table exists
-// ============================================================
-
 bool Catalog::tableExists(
     const std::string& name
 ) const
 {
-    return tables.find(name) != tables.end();
+    for (const auto& table : tables)
+    {
+        if (table.name == name)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
-
-// ============================================================
-// Get schema
-// ============================================================
 
 const Schema& Catalog::getSchema(
     const std::string& name
 ) const
 {
-    auto it = tables.find(name);
-
-    if (it == tables.end())
+    for (const auto& table : tables)
     {
-        throw std::runtime_error(
-            "Table does not exist: " + name
-        );
+        if (table.name == name)
+        {
+            return table.schema;
+        }
     }
 
-    return it->second.schema;
+    throw std::runtime_error(
+        "Table not found: " + name
+    );
 }
 
-
-// ============================================================
-// Get first page
-// ============================================================
 
 int Catalog::getFirstPage(
     const std::string& name
 ) const
 {
-    auto it = tables.find(name);
-
-    if (it == tables.end())
+    for (const auto& table : tables)
     {
-        throw std::runtime_error(
-            "Table does not exist: " + name
-        );
+        if (table.name == name)
+        {
+            return table.firstPage;
+        }
     }
 
-    return it->second.firstPage;
+    throw std::runtime_error(
+        "Table not found: " + name
+    );
 }
 
-
-// ============================================================
-// List tables
-// ============================================================
 
 std::vector<std::string>
 Catalog::listTables() const
 {
-    std::vector<std::string> result;
+    std::vector<std::string> names;
 
-    for (const auto& entry : tables)
+    for (const auto& table : tables)
     {
-        result.push_back(entry.first);
+        names.push_back(table.name);
     }
 
-    return result;
+    return names;
 }
 
 
-// ============================================================
-// Get all metadata
-// ============================================================
-
-const std::map<std::string, TableMetadata>&
+const std::vector<TableMetadata>&
 Catalog::getTables() const
 {
     return tables;
 }
 
-
-// ============================================================
-// Clear catalog
-// ============================================================
 
 void Catalog::clear()
 {

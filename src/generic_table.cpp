@@ -6,25 +6,25 @@
 GenericTable::GenericTable(
     Pager& pager,
     BufferPool& bufferPool,
-    const Schema& schema
+    PageAllocator& pageAllocator,
+    const Schema& schema,
+    int firstPage
 )
     : pager(pager),
       bufferPool(bufferPool),
+      pageAllocator(pageAllocator),
       schema(schema),
-      firstPage(0)
+      firstPage(firstPage)
 {
 }
 
 
+// ============================================================
+// Insert
+// ============================================================
+
 bool GenericTable::insert(const Row& row)
 {
-    /*
-        For now we start from the first page.
-
-        Later we will maintain a page directory
-        so that we don't have to scan from page 0.
-    */
-
     int pageNumber = firstPage;
 
     while (true)
@@ -39,33 +39,60 @@ bool GenericTable::insert(const Row& row)
 
         RecordPage page(pageData);
 
-        /*
-            Try inserting into this page.
-        */
-
+        // Try inserting into current page
         if (page.insert(row))
         {
-            /*
-                Page has changed.
-                Tell BufferPool that it needs
-                to be written to disk.
-            */
-
             bufferPool.markDirty(pageNumber);
-
             return true;
         }
 
-        /*
-            Page is full.
+        // Current page is full.
+        int nextPage = page.getNextPage();
 
-            Move to next page.
-        */
+        // Another page already belongs to this table.
+        if (nextPage != -1)
+        {
+            pageNumber = nextPage;
+            continue;
+        }
 
-        pageNumber++;
+        // No next page.
+        // Allocate a completely new page.
+        int newPage =
+            pageAllocator.allocatePage();
+
+        // Link current page to new page.
+        page.setNextPage(newPage);
+
+        bufferPool.markDirty(pageNumber);
+
+        // Load the new page.
+        char* newPageData =
+            bufferPool.getPage(newPage);
+
+        if (newPageData == nullptr)
+        {
+            return false;
+        }
+
+        RecordPage newRecordPage(newPageData);
+
+        // New page must be empty.
+        if (!newRecordPage.insert(row))
+        {
+            return false;
+        }
+
+        bufferPool.markDirty(newPage);
+
+        return true;
     }
 }
 
+
+// ============================================================
+// Get Row
+// ============================================================
 
 Row GenericTable::get(int index)
 {
@@ -80,7 +107,7 @@ Row GenericTable::get(int index)
 
     int pageNumber = firstPage;
 
-    while (true)
+    while (pageNumber != -1)
     {
         char* pageData =
             bufferPool.getPage(pageNumber);
@@ -103,23 +130,18 @@ Row GenericTable::get(int index)
 
         remaining -= count;
 
-        /*
-            If there are no records on this page
-            and we haven't found the requested row,
-            the row doesn't exist.
-        */
-
-        if (count == 0)
-        {
-            throw std::out_of_range(
-                "Row does not exist"
-            );
-        }
-
-        pageNumber++;
+        pageNumber = page.getNextPage();
     }
+
+    throw std::out_of_range(
+        "Row does not exist"
+    );
 }
 
+
+// ============================================================
+// Number of rows
+// ============================================================
 
 int GenericTable::size()
 {
@@ -127,7 +149,7 @@ int GenericTable::size()
 
     int pageNumber = firstPage;
 
-    while (true)
+    while (pageNumber != -1)
     {
         char* pageData =
             bufferPool.getPage(pageNumber);
@@ -139,21 +161,18 @@ int GenericTable::size()
 
         RecordPage page(pageData);
 
-        int count = page.size();
+        total += page.size();
 
-        if (count == 0)
-        {
-            break;
-        }
-
-        total += count;
-
-        pageNumber++;
+        pageNumber = page.getNextPage();
     }
 
     return total;
 }
 
+
+// ============================================================
+// Schema
+// ============================================================
 
 const Schema& GenericTable::getSchema() const
 {

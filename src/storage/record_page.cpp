@@ -95,10 +95,7 @@ bool RecordPage::insert(const Row& row)
         static_cast<int>(bytes.size());
 
 
-    // ------------------------------------------
     // Store record size
-    // ------------------------------------------
-
     std::memcpy(
         pageData + offset,
         &recordSize,
@@ -108,10 +105,7 @@ bool RecordPage::insert(const Row& row)
     offset += RECORD_SIZE_HEADER;
 
 
-    // ------------------------------------------
     // Store serialized Row
-    // ------------------------------------------
-
     std::memcpy(
         pageData + offset,
         bytes.data(),
@@ -119,10 +113,7 @@ bool RecordPage::insert(const Row& row)
     );
 
 
-    // ------------------------------------------
     // Increase record count
-    // ------------------------------------------
-
     int recordCount = size();
 
     recordCount++;
@@ -132,7 +123,6 @@ bool RecordPage::insert(const Row& row)
         &recordCount,
         sizeof(int)
     );
-
 
     return true;
 }
@@ -147,7 +137,6 @@ Row RecordPage::get(int index) const
     int offset =
         getRecordOffset(index);
 
-
     int recordSize;
 
     std::memcpy(
@@ -158,12 +147,10 @@ Row RecordPage::get(int index) const
 
     offset += RECORD_SIZE_HEADER;
 
-
     std::vector<uint8_t> bytes(
         pageData + offset,
         pageData + offset + recordSize
     );
-
 
     return Serializer::deserialize(bytes);
 }
@@ -189,6 +176,48 @@ int RecordPage::size() const
     );
 
     return recordCount;
+}
+
+
+// ============================================================
+// Next page in this table's page chain
+// ============================================================
+
+int RecordPage::getNextPage() const
+{
+    if (pageData == nullptr)
+    {
+        return -1;
+    }
+
+    int nextPage;
+
+    std::memcpy(
+        &nextPage,
+        pageData + sizeof(int),
+        sizeof(int)
+    );
+
+    return nextPage;
+}
+
+
+// ============================================================
+// Set next page
+// ============================================================
+
+void RecordPage::setNextPage(int pageNumber)
+{
+    if (pageData == nullptr)
+    {
+        return;
+    }
+
+    std::memcpy(
+        pageData + sizeof(int),
+        &pageNumber,
+        sizeof(int)
+    );
 }
 
 
@@ -250,5 +279,14 @@ void RecordPage::clear()
         pageData,
         0,
         PAGE_SIZE
+    );
+
+    // -1 means this is the last page.
+    int noNextPage = -1;
+
+    std::memcpy(
+        pageData + sizeof(int),
+        &noNextPage,
+        sizeof(int)
     );
 }

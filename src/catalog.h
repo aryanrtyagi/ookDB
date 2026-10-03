@@ -2,10 +2,11 @@
 #define CATALOG_H
 
 #include <string>
-#include <map>
 #include <vector>
 
 #include "record/schema.h"
+
+class PageAllocator;
 
 struct TableMetadata
 {
@@ -17,16 +18,18 @@ struct TableMetadata
 class Catalog
 {
 private:
-    std::map<std::string, TableMetadata> tables;
+    std::vector<TableMetadata> tables;
+
+    // Page allocator used to assign storage pages to tables.
+    PageAllocator& pageAllocator;
 
 public:
 
-    Catalog();
+    explicit Catalog(PageAllocator& pageAllocator);
 
     bool createTable(
         const std::string& name,
-        const Schema& schema,
-        int firstPage
+        const Schema& schema
     );
 
     bool tableExists(
@@ -43,7 +46,7 @@ public:
 
     std::vector<std::string> listTables() const;
 
-    const std::map<std::string, TableMetadata>&
+    const std::vector<TableMetadata>&
     getTables() const;
 
     void clear();

@@ -26,6 +26,7 @@ public:
     Value(double value);
     Value(bool value);
     Value(const std::string& value);
+    Value(const char* value);
 
     DataType getType() const;
 

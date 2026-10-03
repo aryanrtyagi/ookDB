@@ -11,7 +11,7 @@ class RecordPage
 private:
     char* pageData;
 
-    static constexpr int HEADER_SIZE = sizeof(int);
+    static constexpr int HEADER_SIZE = sizeof(int) * 2;
     static constexpr int RECORD_SIZE_HEADER = sizeof(int);
 
     int getRecordOffset(int index) const;
@@ -31,6 +31,10 @@ public:
     int usedSpace() const;
 
     int freeSpace() const;
+
+    int getNextPage() const;
+
+    void setNextPage(int pageNumber);
 
     void clear();
 };

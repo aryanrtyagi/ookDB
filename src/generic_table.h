@@ -3,6 +3,7 @@
 
 #include "pager.h"
 #include "buffer_pool.h"
+#include "page_allocator.h"
 
 #include "record/row.h"
 #include "record/schema.h"
@@ -14,10 +15,10 @@ class GenericTable
 private:
     Pager& pager;
     BufferPool& bufferPool;
+    PageAllocator& pageAllocator;
 
     Schema schema;
 
-    // First page used by this table
     int firstPage;
 
 public:
@@ -25,7 +26,9 @@ public:
     GenericTable(
         Pager& pager,
         BufferPool& bufferPool,
-        const Schema& schema
+        PageAllocator& pageAllocator,
+        const Schema& schema,
+        int firstPage
     );
 
     bool insert(const Row& row);

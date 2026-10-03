@@ -24,6 +24,12 @@ Value::Value(const std::string& value)
     stringValue = value;
 }
 
+Value::Value(const char* value)
+{
+    type = DataType::VARCHAR;
+    stringValue = value;
+}
+
 DataType Value::getType() const
 {
     return type;

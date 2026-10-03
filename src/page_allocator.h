@@ -3,20 +3,15 @@
 
 #include "pager.h"
 
-class PageAllocator
-{
+class PageAllocator{
 private:
     Pager& pager;
+    int nextPageNumber;
 
 public:
-
-    explicit PageAllocator(
-        Pager& pager
-    );
-
-    int allocatePage();
-
+    explicit PageAllocator( Pager& pager );
     int getNextPageNumber() const;
+    int allocatePage();
 };
 
 #endif
