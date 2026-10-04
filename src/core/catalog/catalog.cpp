@@ -119,3 +119,17 @@ void Catalog::clear()
 {
     tables.clear();
 }
+
+void Catalog::restoreTable(
+    const std::string& name,
+    const Schema& schema,
+    int firstPage)
+{
+    TableMetadata metadata;
+
+    metadata.name = name;
+    metadata.schema = schema;
+    metadata.firstPage = firstPage;
+
+    tables.push_back(metadata);
+}

@@ -8,11 +8,11 @@
 // ============================================================
 
 static void writeInt(
-    std::vector<uint8_t> &buffer,
+    std::vector<uint8_t>& buffer,
     int value)
 {
-    uint8_t *bytes =
-        reinterpret_cast<uint8_t *>(&value);
+    uint8_t* bytes =
+        reinterpret_cast<uint8_t*>(&value);
 
     buffer.insert(
         buffer.end(),
@@ -21,8 +21,8 @@ static void writeInt(
 }
 
 static int readInt(
-    const std::vector<uint8_t> &buffer,
-    size_t &offset)
+    const std::vector<uint8_t>& buffer,
+    size_t& offset)
 {
     if (offset + sizeof(int) > buffer.size())
     {
@@ -43,8 +43,8 @@ static int readInt(
 }
 
 static void writeString(
-    std::vector<uint8_t> &buffer,
-    const std::string &value)
+    std::vector<uint8_t>& buffer,
+    const std::string& value)
 {
     writeInt(
         buffer,
@@ -57,8 +57,8 @@ static void writeString(
 }
 
 static std::string readString(
-    const std::vector<uint8_t> &buffer,
-    size_t &offset)
+    const std::vector<uint8_t>& buffer,
+    size_t& offset)
 {
     int length =
         readInt(buffer, offset);
@@ -72,7 +72,7 @@ static std::string readString(
     }
 
     std::string result(
-        reinterpret_cast<const char *>(
+        reinterpret_cast<const char*>(
             buffer.data() + offset),
         length);
 
@@ -87,11 +87,11 @@ static std::string readString(
 
 std::vector<uint8_t>
 CatalogSerializer::serialize(
-    const Catalog &catalog)
+    const Catalog& catalog)
 {
     std::vector<uint8_t> buffer;
 
-    const auto &tables =
+    const auto& tables =
         catalog.getTables();
 
     // Number of tables
@@ -99,10 +99,11 @@ CatalogSerializer::serialize(
         buffer,
         static_cast<int>(tables.size()));
 
-    for (const auto &entry : tables)
+    for (const auto& entry : tables)
     {
-        const TableMetadata &metadata =
-            entry.second;
+        // entry itself is TableMetadata.
+        const TableMetadata& metadata =
+            entry;
 
         // --------------------------------------
         // Table name
@@ -121,12 +122,15 @@ CatalogSerializer::serialize(
 
         writeInt(
             buffer,
-            columnCount
-        );
+            columnCount);
+
+        // --------------------------------------
+        // Columns
+        // --------------------------------------
 
         for (int i = 0; i < columnCount; i++)
         {
-            const Column &column =
+            const Column& column =
                 metadata.schema.getColumn(i);
 
             writeString(
@@ -156,8 +160,8 @@ CatalogSerializer::serialize(
 // ============================================================
 
 void CatalogSerializer::deserialize(
-    const std::vector<uint8_t> &data,
-    Catalog &catalog)
+    const std::vector<uint8_t>& data,
+    Catalog& catalog)
 {
     catalog.clear();
 
@@ -204,7 +208,9 @@ void CatalogSerializer::deserialize(
         int firstPage =
             readInt(data, offset);
 
-        catalog.createTable(
+        // Restore the existing page.
+        // Do NOT allocate a new page here.
+        catalog.restoreTable(
             tableName,
             schema,
             firstPage);

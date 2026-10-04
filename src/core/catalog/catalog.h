@@ -50,6 +50,14 @@ public:
     getTables() const;
 
     void clear();
+
+    // Restore an existing table from persisted catalog metadata.
+    // Does NOT allocate a new page.
+    void restoreTable(
+        const std::string& name,
+        const Schema& schema,
+        int firstPage
+    );
 };
 
 #endif
