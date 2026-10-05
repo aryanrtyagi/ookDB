@@ -1,7 +1,7 @@
 #ifndef BUFFER_POOL_H
 #define BUFFER_POOL_H
 
-#include "pager.h"
+#include "../pager/pager.h"
 
 #include <array>
 

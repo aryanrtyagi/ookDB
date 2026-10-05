@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "record/schema.h"
+#include "../../record/schema.h"
 
 class PageAllocator;
 

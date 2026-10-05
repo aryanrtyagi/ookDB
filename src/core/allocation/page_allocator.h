@@ -1,7 +1,7 @@
 #ifndef PAGE_ALLOCATOR_H
 #define PAGE_ALLOCATOR_H
 
-#include "pager.h"
+#include "../pager/pager.h"
 
 class PageAllocator{
 private:

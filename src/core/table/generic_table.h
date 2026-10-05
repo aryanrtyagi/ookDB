@@ -1,14 +1,13 @@
 #ifndef GENERIC_TABLE_H
 #define GENERIC_TABLE_H
 
-#include "pager.h"
-#include "buffer_pool.h"
-#include "page_allocator.h"
+#include "../pager/pager.h"
+#include "../buffer/buffer_pool.h"
+#include "../allocation/page_allocator.h"
 
-#include "record/row.h"
-#include "record/schema.h"
-
-#include "storage/record_page.h"
+#include "../../record/row.h"
+#include "../../record/schema.h"
+#include "../../storage/record_page.h"
 
 class GenericTable
 {

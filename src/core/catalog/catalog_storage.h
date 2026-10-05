@@ -2,7 +2,7 @@
 #define CATALOG_STORAGE_H
 
 #include "catalog.h"
-#include "buffer_pool.h"
+#include "../buffer/buffer_pool.h"
 
 class CatalogStorage
 {

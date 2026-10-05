@@ -12,14 +12,14 @@ private:
 
 public:
     void addColumn(
-        const std::string& name,
-        DataType type
-    );
+        const std::string &name,
+        DataType type);
 
     int size() const;
-    
-    const Column& getColumn(int index) const;
 
+    const Column &getColumn(int index) const;
+    int getColumnIndex(
+        const std::string &name) const;
 };
 
 #endif

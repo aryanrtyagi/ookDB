@@ -1,5 +1,5 @@
 #include "catalog.h"
-#include "page_allocator.h"
+#include "../allocation/page_allocator.h"
 
 #include <stdexcept>
 

@@ -1,7 +1,7 @@
 #ifndef RECORD_PAGE_H
 #define RECORD_PAGE_H
 
-#include "../pager.h"
+#include "../core/pager/pager.h"
 #include "../record/row.h"
 
 #include <cstdint>

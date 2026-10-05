@@ -17,3 +17,18 @@ int Schema::size() const
 {
     return static_cast<int>(columns.size());
 }
+
+int Schema::getColumnIndex(
+    const std::string& name
+) const
+{
+    for (int i = 0; i < columns.size(); i++)
+    {
+        if (columns[i].getName() == name)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
