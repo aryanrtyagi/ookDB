@@ -29,6 +29,7 @@ private:
         const Condition &condition
     );
 
+<<<<<<< HEAD
     Value convertLiteral(
         const Literal& literal,
         DataType expectedType
@@ -38,6 +39,11 @@ private:
     void executeInsert(const InsertQuery& query);
     void executeUpdate(const UpdateQuery& query);
     void executeDelete(const DeleteQuery& query);
+=======
+    void executeSelect(
+        const SelectQuery& query
+    );
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     
 public:
     Executor(

@@ -2,9 +2,49 @@
 
 #include <iostream>
 #include <stdexcept>
+<<<<<<< HEAD
 #include <string>
 #include <algorithm>
 #include <cctype>
+=======
+#include <algorithm>
+#include <cctype>
+
+static DataType parseDataType(
+    const std::string& type)
+{
+    std::string upper = type;
+
+    for (char& c : upper)
+    {
+        c = static_cast<char>(
+            std::toupper(
+                static_cast<unsigned char>(c)
+            )
+        );
+    }
+
+    if (upper == "INT")
+        return DataType::INT;
+
+    if (upper == "DOUBLE")
+        return DataType::DOUBLE;
+
+    if (upper == "BOOLEAN")
+        return DataType::BOOLEAN;
+
+    if (upper == "VARCHAR")
+        return DataType::VARCHAR;
+
+    throw std::runtime_error(
+        "Unknown data type: " + type
+    );
+}
+
+// ----------------------------------------
+// Constructor
+// ----------------------------------------
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
 
 // Convert SQL datatype text into the core DataType enum.
 static DataType parseDataType(const std::string &typeName)
@@ -37,11 +77,19 @@ static DataType parseDataType(const std::string &typeName)
 
 // Constructor
 Executor::Executor(
+<<<<<<< HEAD
     Pager &pager,
     BufferPool &bufferPool,
     PageAllocator &pageAllocator,
     Catalog &catalog,
     CatalogStorage &catalogStorage)
+=======
+    Pager& pager,
+    BufferPool& bufferPool,
+    PageAllocator& pageAllocator,
+    Catalog& catalog
+)
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     : pager(pager),
       bufferPool(bufferPool),
       pageAllocator(pageAllocator),
@@ -50,11 +98,29 @@ Executor::Executor(
 {
 }
 
+<<<<<<< HEAD
 // Open an existing table using Phase 1 storage APIs.
 GenericTable Executor::openTable(const std::string &tableName)
 {
     if (!catalog.tableExists(tableName))
         throw std::runtime_error("Table does not exist: " + tableName);
+=======
+// ----------------------------------------
+// Open table
+// ----------------------------------------
+
+GenericTable Executor::openTable(
+    const std::string& tableName
+)
+{
+    if (!catalog.tableExists(tableName))
+    {
+        throw std::runtime_error(
+            "Table does not exist: " +
+            tableName
+        );
+    }
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
 
     Schema schema = catalog.getSchema(tableName);
     int firstPage = catalog.getFirstPage(tableName);
@@ -64,10 +130,48 @@ GenericTable Executor::openTable(const std::string &tableName)
         bufferPool,
         pageAllocator,
         schema,
-        firstPage);
+        firstPage
+    );
 }
 
+<<<<<<< HEAD
 // Evaluate a WHERE condition for a row.
+=======
+// ----------------------------------------
+// Print a Value according to its type
+// ----------------------------------------
+
+static void printValue(
+    const Value& value
+)
+{
+    switch (value.getType())
+    {
+        case DataType::INT:
+            std::cout << value.asInt();
+            break;
+
+        case DataType::DOUBLE:
+            std::cout << value.asDouble();
+            break;
+
+        case DataType::BOOLEAN:
+            std::cout
+                << (value.asBool()
+                    ? "true"
+                    : "false");
+            break;
+
+        case DataType::VARCHAR:
+            std::cout << value.asString();
+            break;
+    }
+}
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
+
+// ----------------------------------------
+// Evaluate WHERE condition
+// ----------------------------------------
 
 bool Executor::evaluateCondition(
     const Row &row,
@@ -84,11 +188,20 @@ bool Executor::evaluateCondition(
 
     const Value &actual = row.getValue(columnIndex);
 
+<<<<<<< HEAD
     Value expected = convertLiteral(
         condition.value,
         schema.getColumn(columnIndex).getType());
 
     if (actual.getType() != expected.getType())
+=======
+    // ------------------------------------
+    // NUMBER literal
+    // ------------------------------------
+
+    if (condition.value.type ==
+        LiteralType::NUMBER)
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     {
         throw std::runtime_error("WHERE value type mismatch");
     }
@@ -182,17 +295,84 @@ bool Executor::evaluateCondition(
                 "Ordering comparisons are not supported for BOOLEAN");
         }
     }
+<<<<<<< HEAD
+=======
+
+    // ------------------------------------
+    // STRING literal
+    // ------------------------------------
+
+    if (condition.value.type ==
+        LiteralType::STRING)
+    {
+        std::string left =
+            rowValue.asString();
+
+        std::string right =
+            condition.value.value;
+
+        switch (condition.op)
+        {
+            case ComparisonOperator::EQUAL:
+                return left == right;
+
+            case ComparisonOperator::NOT_EQUAL:
+                return left != right;
+
+            case ComparisonOperator::GREATER:
+                return left > right;
+
+            case ComparisonOperator::LESS:
+                return left < right;
+
+            case ComparisonOperator::GREATER_EQUAL:
+                return left >= right;
+
+            case ComparisonOperator::LESS_EQUAL:
+                return left <= right;
+        }
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     }
 
     throw std::runtime_error("Unsupported comparison operator");
 }
 
+<<<<<<< HEAD
 // Convert a SQL literal into the requested core Value type.
 Value Executor::convertLiteral(
     const Literal &literal,
     DataType expectedType)
 {
     try
+=======
+// ----------------------------------------
+// Execute SELECT
+// ----------------------------------------
+
+void Executor::executeSelect(
+    const SelectQuery& query
+)
+{
+    // ------------------------------------
+    // Open table
+    // ------------------------------------
+
+    GenericTable table =
+        openTable(query.tableName);
+
+    const Schema& schema =
+        table.getSchema();
+
+    // ------------------------------------
+    // Determine requested columns
+    // ------------------------------------
+
+    std::vector<int> columnIndexes;
+
+    // SELECT *
+    if (query.columns.size() == 1 &&
+        query.columns[0] == "*")
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     {
         switch (expectedType)
         {
@@ -256,6 +436,7 @@ Value Executor::convertLiteral(
         }
         }
     }
+<<<<<<< HEAD
     catch (const std::invalid_argument &)
     {
         throw std::runtime_error(
@@ -286,23 +467,53 @@ void Executor::executeSelect(const SelectQuery &query)
     else
     {
         for (const std::string &columnName : query.columns)
+=======
+    // SELECT name, age, ...
+    else
+    {
+        for (const std::string& column :
+             query.columns)
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
         {
             int index = schema.getColumnIndex(columnName);
 
             if (index < 0)
                 throw std::runtime_error(
+<<<<<<< HEAD
                     "Column does not exist: " + columnName);
+=======
+                    "Unknown column: " +
+                    column
+                );
+            }
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
 
             selectedColumns.push_back(index);
         }
     }
 
+<<<<<<< HEAD
     // Print selected column headers.
     for (std::size_t i = 0; i < selectedColumns.size(); ++i)
+=======
+    // ------------------------------------
+    // Scan rows
+    // ------------------------------------
+
+    int rowCount =
+        table.size();
+
+    int rowsReturned = 0;
+
+    for (int i = 0;
+         i < rowCount;
+         i++)
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     {
         if (i > 0)
             std::cout << " | ";
 
+<<<<<<< HEAD
         std::cout << schema.getColumn(selectedColumns[i]).getName();
     }
 
@@ -404,6 +615,63 @@ void Executor::executeInsert(const InsertQuery &query)
 
 // Dispatch parsed SQL queries to their execution methods.
 void Executor::execute(const Query &query)
+=======
+        // --------------------------------
+        // WHERE
+        // --------------------------------
+
+        if (query.hasCondition)
+        {
+            if (!evaluateCondition(
+                    row,
+                    schema,
+                    query.condition))
+            {
+                continue;
+            }
+        }
+
+        // --------------------------------
+        // Projection
+        // --------------------------------
+
+        for (int j = 0;
+             j < columnIndexes.size();
+             j++)
+        {
+            Value value =
+                row.getValue(
+                    columnIndexes[j]
+                );
+
+            printValue(value);
+
+            if (j + 1 < columnIndexes.size())
+            {
+                std::cout << " | ";
+            }
+        }
+
+        std::cout << "\n";
+
+        // --------------------------------
+        // LIMIT
+        // --------------------------------
+
+        rowsReturned++;
+
+        if (query.limit >= 0 &&
+            rowsReturned >= query.limit)
+        {
+            break;
+        }
+    }
+}
+
+void Executor::execute(
+    const Query& query
+)
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
 {
     if (query.type == QueryType::SELECT)
     {
@@ -413,6 +681,7 @@ void Executor::execute(const Query &query)
 
     if (query.type == QueryType::CREATE_TABLE)
     {
+<<<<<<< HEAD
         const CreateTableQuery &createQuery = query.createTable;
 
         if (catalog.tableExists(createQuery.tableName))
@@ -545,3 +814,57 @@ void Executor::executeDelete(const DeleteQuery &query)
 
     std::cout << deletedCount << " row(s) deleted.\n";
 }
+=======
+        const CreateTableQuery& createQuery =
+            query.createTable;
+
+        if (catalog.tableExists(
+                createQuery.tableName))
+        {
+            throw std::runtime_error(
+                "Table already exists: " +
+                createQuery.tableName
+            );
+        }
+
+        Schema schema;
+
+        for (const ColumnDefinition& column :
+             createQuery.columns)
+        {
+            DataType type =
+                parseDataType(column.type);
+
+            schema.addColumn(
+                column.name,
+                type
+            );
+        }
+
+        bool success =
+            catalog.createTable(
+                createQuery.tableName,
+                schema
+            );
+
+        if (!success)
+        {
+            throw std::runtime_error(
+                "Failed to create table: " +
+                createQuery.tableName
+            );
+        }
+
+        std::cout
+            << "Table '"
+            << createQuery.tableName
+            << "' created successfully.\n";
+
+        return;
+    }
+
+    throw std::runtime_error(
+        "Unsupported query type"
+    );
+}
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22

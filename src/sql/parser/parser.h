@@ -37,6 +37,10 @@ private:
     UpdateQuery parseUpdate();
     DeleteQuery parseDelete();
 
+    CreateTableQuery parseCreateTable();
+
+    InsertQuery parseInsert();
+
 public:
     explicit Parser(
         const std::vector<Token> &tokens);

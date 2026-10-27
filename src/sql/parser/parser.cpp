@@ -254,6 +254,26 @@ Query Parser::parse()
     {
         query.type = QueryType::SELECT;
         query.select = parseSelect();
+<<<<<<< HEAD
+=======
+
+        return query;
+    }
+
+    if (check(TokenType::CREATE))
+    {
+        query.type = QueryType::CREATE_TABLE;
+        query.createTable = parseCreateTable();
+
+        return query;
+    }
+
+    if (check(TokenType::INSERT))
+    {
+        query.type = QueryType::INSERT;
+        query.insert = parseInsert();
+
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
         return query;
     }
 
@@ -388,6 +408,7 @@ InsertQuery Parser::parseInsert()
     query.values = values;
 
     return query;
+<<<<<<< HEAD
 }
 
 
@@ -451,3 +472,6 @@ DeleteQuery Parser::parseDelete()
 
     return query;
 }
+=======
+}
+>>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
