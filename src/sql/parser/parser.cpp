@@ -246,14 +246,208 @@ SelectQuery Parser::parseSelect()
     return query;
 }
 
-SelectQuery Parser::parse()
+Query Parser::parse()
 {
+    Query query;
+
     if (check(TokenType::SELECT))
     {
-        return parseSelect();
+        query.type = QueryType::SELECT;
+        query.select = parseSelect();
+        return query;
     }
 
+    if (check(TokenType::CREATE))
+    {
+        query.type = QueryType::CREATE_TABLE;
+        query.createTable = parseCreateTable();
+        return query;
+    }
+
+    if (check(TokenType::INSERT))
+    {
+        query.type = QueryType::INSERT;
+        query.insert = parseInsert();
+        return query;
+    }
+
+    if (check(TokenType::UPDATE))
+    {
+        query.type = QueryType::UPDATE;
+        query.update = parseUpdate();
+        return query;
+    }
+
+    if (check(TokenType::DELETE))
+    {
+        query.type = QueryType::DELETE;
+        query.remove = parseDelete();
+        return query;
+    }
+    
     throw std::runtime_error(
-        "Only SELECT is supported currently"
+        "Unsupported query"
     );
+}
+
+CreateTableQuery Parser::parseCreateTable()
+{
+    expect(TokenType::CREATE);
+
+    expect(TokenType::TABLE);
+
+    std::string tableName =
+        parseIdentifier();
+
+    expect(TokenType::LEFT_PAREN);
+
+    std::vector<ColumnDefinition> columns;
+
+    while (true)
+    {
+        std::string columnName =
+            parseIdentifier();
+
+        std::string columnType =
+            parseIdentifier();
+
+        columns.push_back({
+            columnName,
+            columnType
+        });
+
+        if (match(TokenType::COMMA))
+        {
+            continue;
+        }
+
+        break;
+    }
+
+    expect(TokenType::RIGHT_PAREN);
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+    {
+        throw std::runtime_error(
+            "Unexpected token: " +
+            currentToken().value
+        );
+    }
+
+    CreateTableQuery query;
+
+    query.tableName = tableName;
+    query.columns = columns;
+
+    return query;
+}
+
+InsertQuery Parser::parseInsert()
+{
+    expect(TokenType::INSERT);
+
+    expect(TokenType::INTO);
+
+    std::string tableName =
+        parseIdentifier();
+
+    expect(TokenType::VALUES);
+
+    expect(TokenType::LEFT_PAREN);
+
+    std::vector<Literal> values;
+
+    values.push_back(
+        parseLiteral()
+    );
+
+    while (match(TokenType::COMMA))
+    {
+        values.push_back(
+            parseLiteral()
+        );
+    }
+
+    expect(TokenType::RIGHT_PAREN);
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+    {
+        throw std::runtime_error(
+            "Unexpected token: " +
+            currentToken().value
+        );
+    }
+
+    InsertQuery query;
+
+    query.tableName = tableName;
+    query.values = values;
+
+    return query;
+}
+
+
+UpdateQuery Parser::parseUpdate()
+{
+    expect(TokenType::UPDATE);
+
+    UpdateQuery query;
+    query.tableName = parseIdentifier();
+
+    expect(TokenType::SET);
+
+    query.column = parseIdentifier();
+
+    expect(TokenType::EQUAL);
+
+    query.value = parseLiteral();
+    query.hasCondition = false;
+
+    if (match(TokenType::WHERE))
+    {
+        query.hasCondition = true;
+        query.condition = parseCondition();
+    }
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+    {
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+    }
+
+    return query;
+}
+
+DeleteQuery Parser::parseDelete()
+{
+    expect(TokenType::DELETE);
+    expect(TokenType::FROM);
+
+    DeleteQuery query;
+    query.tableName = parseIdentifier();
+    query.hasCondition = false;
+
+    if (match(TokenType::WHERE))
+    {
+        query.hasCondition = true;
+        query.condition = parseCondition();
+    }
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+    {
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+    }
+
+    return query;
 }

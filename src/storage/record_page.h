@@ -36,6 +36,10 @@ public:
 
     void setNextPage(int pageNumber);
 
+    bool update(int index, const Row& row);
+
+    bool erase(int index);
+
     void clear();
 };
 

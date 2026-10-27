@@ -156,6 +156,86 @@ Row RecordPage::get(int index) const
 }
 
 
+bool RecordPage::update(int index, const Row& row)
+{
+    if (index < 0 || index >= size())
+        return false;
+
+    // Keep the original records until we know the
+    // replacement will fit in this page.
+    std::vector<Row> rows;
+    rows.reserve(size());
+
+    for (int i = 0; i < size(); ++i)
+    {
+        if (i == index)
+            rows.push_back(row);
+        else
+            rows.push_back(get(i));
+    }
+
+    int requiredSpace = HEADER_SIZE;
+
+    for (const Row& currentRow : rows)
+    {
+        const auto bytes = Serializer::serialize(currentRow);
+
+        requiredSpace += RECORD_SIZE_HEADER;
+        requiredSpace += static_cast<int>(bytes.size());
+    }
+
+    // Do not modify the page if the replacement won't fit.
+    if (requiredSpace > PAGE_SIZE)
+        return false;
+
+    // Preserve the table's page-chain link.
+    int nextPage = getNextPage();
+
+    clear();
+    setNextPage(nextPage);
+
+    for (const Row& currentRow : rows)
+    {
+        if (!insert(currentRow))
+            throw std::runtime_error(
+                "Failed to rebuild page after update"
+            );
+    }
+
+    return true;
+}
+
+bool RecordPage::erase(int index)
+{
+    if (index < 0 || index >= size())
+        return false;
+
+    std::vector<Row> rows;
+    rows.reserve(size() - 1);
+
+    for (int i = 0; i < size(); ++i)
+    {
+        if (i != index)
+            rows.push_back(get(i));
+    }
+
+    // Preserve the table's page-chain link.
+    int nextPage = getNextPage();
+
+    clear();
+    setNextPage(nextPage);
+
+    for (const Row& currentRow : rows)
+    {
+        if (!insert(currentRow))
+            throw std::runtime_error(
+                "Failed to rebuild page after deletion"
+            );
+    }
+
+    return true;
+}
+
 // ============================================================
 // Number of records
 // ============================================================

@@ -37,6 +37,10 @@ public:
     int size();
 
     const Schema& getSchema() const;
+
+    bool updateRow(int index, const Row& row);
+
+    bool deleteRow(int index);
 };
 
 #endif

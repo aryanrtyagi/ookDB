@@ -3,20 +3,31 @@
 
 #include <string>
 
+#include "../../core/pager/pager.h"
+#include "../../core/buffer/buffer_pool.h"
+#include "../../core/allocation/page_allocator.h"
+#include "../../core/catalog/catalog.h"
+#include "../../sql/executor/executor.h"
+#include "../../core/catalog/catalog_storage.h"
+
 class Repl
 {
 private:
     bool running;
 
-    void printPrompt();
+    // Storage components: initialized in dependency order
+    Pager pager;
+    BufferPool bufferPool;
+    PageAllocator pageAllocator;
+    Catalog catalog;
+    CatalogStorage catalogStorage;
+    Executor executor;
 
-    void processCommand(
-        const std::string& command
-    );
+    void printPrompt();
+    void processCommand(const std::string& command);
 
 public:
     Repl();
-
     void run();
 };
 

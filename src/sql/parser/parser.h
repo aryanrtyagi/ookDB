@@ -13,7 +13,7 @@ private:
     std::vector<Token> tokens;
     size_t position;
 
-    const Token& currentToken() const;
+    const Token &currentToken() const;
 
     bool check(TokenType type) const;
 
@@ -32,13 +32,16 @@ private:
     std::vector<std::string> parseColumnList();
 
     SelectQuery parseSelect();
+    CreateTableQuery parseCreateTable();
+    InsertQuery parseInsert();
+    UpdateQuery parseUpdate();
+    DeleteQuery parseDelete();
 
 public:
     explicit Parser(
-        const std::vector<Token>& tokens
-    );
+        const std::vector<Token> &tokens);
 
-    SelectQuery parse();
+    Query parse();
 };
 
 #endif

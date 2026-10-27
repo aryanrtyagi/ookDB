@@ -139,6 +139,74 @@ Row GenericTable::get(int index)
 }
 
 
+bool GenericTable::updateRow(int index, const Row& row)
+{
+    if (index < 0)
+        return false;
+
+    int remaining = index;
+    int pageNumber = firstPage;
+
+    while (pageNumber != -1)
+    {
+        char* pageData = bufferPool.getPage(pageNumber);
+
+        if (pageData == nullptr)
+            throw std::runtime_error("Could not load page");
+
+        RecordPage page(pageData);
+        int count = page.size();
+
+        if (remaining < count)
+        {
+            if (!page.update(remaining, row))
+                return false;
+
+            bufferPool.markDirty(pageNumber);
+            return true;
+        }
+
+        remaining -= count;
+        pageNumber = page.getNextPage();
+    }
+
+    return false;
+}
+
+bool GenericTable::deleteRow(int index)
+{
+    if (index < 0)
+        return false;
+
+    int remaining = index;
+    int pageNumber = firstPage;
+
+    while (pageNumber != -1)
+    {
+        char* pageData = bufferPool.getPage(pageNumber);
+
+        if (pageData == nullptr)
+            throw std::runtime_error("Could not load page");
+
+        RecordPage page(pageData);
+        int count = page.size();
+
+        if (remaining < count)
+        {
+            if (!page.erase(remaining))
+                return false;
+
+            bufferPool.markDirty(pageNumber);
+            return true;
+        }
+
+        remaining -= count;
+        pageNumber = page.getNextPage();
+    }
+
+    return false;
+}
+
 // ============================================================
 // Number of rows
 // ============================================================
