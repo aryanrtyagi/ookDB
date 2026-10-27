@@ -19,7 +19,6 @@ enum class QueryType
     DELETE
 };
 
-
 // ============================================================
 // Column Definition
 // ============================================================
@@ -29,7 +28,6 @@ struct ColumnDefinition
     std::string name;
     std::string type;
 };
-
 
 // ============================================================
 // CREATE TABLE
@@ -41,7 +39,6 @@ struct CreateTableQuery
     std::vector<ColumnDefinition> columns;
 };
 
-
 // ============================================================
 // INSERT
 // ============================================================
@@ -52,7 +49,6 @@ struct InsertQuery
     std::vector<Literal> values;
 };
 
-
 // ============================================================
 // SELECT
 // ============================================================
@@ -60,17 +56,11 @@ struct InsertQuery
 struct SelectQuery
 {
     std::string tableName;
-
-    // Empty means SELECT *
     std::vector<std::string> columns;
-
     bool hasCondition;
-
     Condition condition;
-
     int limit;
 };
-
 
 // ============================================================
 // UPDATE
@@ -79,16 +69,11 @@ struct SelectQuery
 struct UpdateQuery
 {
     std::string tableName;
-
     std::string column;
-
     Literal value;
-
     bool hasCondition;
-
     Condition condition;
 };
-
 
 // ============================================================
 // DELETE
@@ -97,10 +82,18 @@ struct UpdateQuery
 struct DeleteQuery
 {
     std::string tableName;
-
     bool hasCondition;
-
     Condition condition;
 };
 
+struct Query
+{
+    QueryType type;
+
+    CreateTableQuery createTable;
+    InsertQuery insert;
+    SelectQuery select;
+    UpdateQuery update;
+    DeleteQuery remove;
+};
 #endif

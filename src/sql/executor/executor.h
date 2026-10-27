@@ -29,6 +29,10 @@ private:
         const Condition &condition
     );
 
+    void executeSelect(
+        const SelectQuery& query
+    );
+    
 public:
     Executor(
         Pager &pager,
@@ -37,7 +41,7 @@ public:
         Catalog &catalog);
 
     void execute(
-        const SelectQuery &query);
+        const Query& query);
 };
 
 #endif

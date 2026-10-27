@@ -33,12 +33,16 @@ private:
 
     SelectQuery parseSelect();
 
+    CreateTableQuery parseCreateTable();
+
+    InsertQuery parseInsert();
+
 public:
     explicit Parser(
         const std::vector<Token>& tokens
     );
 
-    SelectQuery parse();
+    Query parse();
 };
 
 #endif
