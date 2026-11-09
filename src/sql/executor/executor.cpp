@@ -1,53 +1,18 @@
+
 #include "executor.h"
 
 #include <iostream>
 #include <stdexcept>
-<<<<<<< HEAD
 #include <string>
 #include <algorithm>
 #include <cctype>
-=======
-#include <algorithm>
-#include <cctype>
+#include <vector>
 
-static DataType parseDataType(
-    const std::string& type)
-{
-    std::string upper = type;
+// --------------------------------------------------
+// Convert SQL datatype text into DataType
+// --------------------------------------------------
 
-    for (char& c : upper)
-    {
-        c = static_cast<char>(
-            std::toupper(
-                static_cast<unsigned char>(c)
-            )
-        );
-    }
-
-    if (upper == "INT")
-        return DataType::INT;
-
-    if (upper == "DOUBLE")
-        return DataType::DOUBLE;
-
-    if (upper == "BOOLEAN")
-        return DataType::BOOLEAN;
-
-    if (upper == "VARCHAR")
-        return DataType::VARCHAR;
-
-    throw std::runtime_error(
-        "Unknown data type: " + type
-    );
-}
-
-// ----------------------------------------
-// Constructor
-// ----------------------------------------
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
-
-// Convert SQL datatype text into the core DataType enum.
-static DataType parseDataType(const std::string &typeName)
+static DataType parseDataType(const std::string& typeName)
 {
     std::string type = typeName;
 
@@ -58,7 +23,8 @@ static DataType parseDataType(const std::string &typeName)
         [](unsigned char c)
         {
             return static_cast<char>(std::toupper(c));
-        });
+        }
+    );
 
     if (type == "INT" || type == "INTEGER")
         return DataType::INT;
@@ -72,24 +38,22 @@ static DataType parseDataType(const std::string &typeName)
     if (type == "VARCHAR" || type == "STRING" || type == "TEXT")
         return DataType::VARCHAR;
 
-    throw std::runtime_error("Unsupported datatype: " + typeName);
+    throw std::runtime_error(
+        "Unsupported datatype: " + typeName
+    );
 }
 
+// --------------------------------------------------
 // Constructor
+// --------------------------------------------------
+
 Executor::Executor(
-<<<<<<< HEAD
-    Pager &pager,
-    BufferPool &bufferPool,
-    PageAllocator &pageAllocator,
-    Catalog &catalog,
-    CatalogStorage &catalogStorage)
-=======
     Pager& pager,
     BufferPool& bufferPool,
     PageAllocator& pageAllocator,
-    Catalog& catalog
+    Catalog& catalog,
+    CatalogStorage& catalogStorage
 )
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     : pager(pager),
       bufferPool(bufferPool),
       pageAllocator(pageAllocator),
@@ -98,29 +62,18 @@ Executor::Executor(
 {
 }
 
-<<<<<<< HEAD
-// Open an existing table using Phase 1 storage APIs.
-GenericTable Executor::openTable(const std::string &tableName)
-{
-    if (!catalog.tableExists(tableName))
-        throw std::runtime_error("Table does not exist: " + tableName);
-=======
-// ----------------------------------------
-// Open table
-// ----------------------------------------
+// --------------------------------------------------
+// Open an existing table
+// --------------------------------------------------
 
-GenericTable Executor::openTable(
-    const std::string& tableName
-)
+GenericTable Executor::openTable(const std::string& tableName)
 {
     if (!catalog.tableExists(tableName))
     {
         throw std::runtime_error(
-            "Table does not exist: " +
-            tableName
+            "Table does not exist: " + tableName
         );
     }
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
 
     Schema schema = catalog.getSchema(tableName);
     int firstPage = catalog.getFirstPage(tableName);
@@ -134,386 +87,307 @@ GenericTable Executor::openTable(
     );
 }
 
-<<<<<<< HEAD
-// Evaluate a WHERE condition for a row.
-=======
-// ----------------------------------------
-// Print a Value according to its type
-// ----------------------------------------
+// --------------------------------------------------
+// Convert SQL literal into a Value
+// --------------------------------------------------
 
-static void printValue(
-    const Value& value
+Value Executor::convertLiteral(
+    const Literal& literal,
+    DataType expectedType
 )
 {
-    switch (value.getType())
+    try
     {
-        case DataType::INT:
-            std::cout << value.asInt();
-            break;
+        switch (expectedType)
+        {
+            case DataType::INT:
+            {
+                if (literal.type != LiteralType::NUMBER)
+                {
+                    throw std::runtime_error(
+                        "Expected an integer"
+                    );
+                }
 
-        case DataType::DOUBLE:
-            std::cout << value.asDouble();
-            break;
+                std::size_t pos = 0;
+                int value = std::stoi(literal.value, &pos);
 
-        case DataType::BOOLEAN:
-            std::cout
-                << (value.asBool()
-                    ? "true"
-                    : "false");
-            break;
+                if (pos != literal.value.size())
+                {
+                    throw std::runtime_error(
+                        "Invalid integer: " + literal.value
+                    );
+                }
 
-        case DataType::VARCHAR:
-            std::cout << value.asString();
-            break;
+                return Value(value);
+            }
+
+            case DataType::DOUBLE:
+            {
+                if (literal.type != LiteralType::NUMBER)
+                {
+                    throw std::runtime_error(
+                        "Expected a number"
+                    );
+                }
+
+                std::size_t pos = 0;
+                double value = std::stod(literal.value, &pos);
+
+                if (pos != literal.value.size())
+                {
+                    throw std::runtime_error(
+                        "Invalid number: " + literal.value
+                    );
+                }
+
+                return Value(value);
+            }
+
+            case DataType::VARCHAR:
+            {
+                if (literal.type != LiteralType::STRING)
+                {
+                    throw std::runtime_error(
+                        "Expected a quoted string"
+                    );
+                }
+
+                return Value(literal.value);
+            }
+
+            case DataType::BOOLEAN:
+            {
+                std::string value = literal.value;
+
+                std::transform(
+                    value.begin(),
+                    value.end(),
+                    value.begin(),
+                    [](unsigned char c)
+                    {
+                        return static_cast<char>(std::tolower(c));
+                    }
+                );
+
+                if (value == "true")
+                    return Value(true);
+
+                if (value == "false")
+                    return Value(false);
+
+                throw std::runtime_error(
+                    "Expected TRUE or FALSE for BOOLEAN"
+                );
+            }
+        }
     }
-}
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
+    catch (const std::invalid_argument&)
+    {
+        throw std::runtime_error(
+            "Invalid literal: " + literal.value
+        );
+    }
+    catch (const std::out_of_range&)
+    {
+        throw std::runtime_error(
+            "Literal is out of range: " + literal.value
+        );
+    }
 
-// ----------------------------------------
+    throw std::runtime_error("Unsupported literal datatype");
+}
+
+// --------------------------------------------------
 // Evaluate WHERE condition
-// ----------------------------------------
+// --------------------------------------------------
 
 bool Executor::evaluateCondition(
-    const Row &row,
-    const Schema &schema,
-    const Condition &condition)
+    const Row& row,
+    const Schema& schema,
+    const Condition& condition
+)
 {
     int columnIndex = schema.getColumnIndex(condition.column);
 
     if (columnIndex < 0)
     {
         throw std::runtime_error(
-            "Column does not exist: " + condition.column);
+            "Column does not exist: " + condition.column
+        );
     }
 
-    const Value &actual = row.getValue(columnIndex);
+    const Value& actual = row.getValue(columnIndex);
 
-<<<<<<< HEAD
     Value expected = convertLiteral(
         condition.value,
-        schema.getColumn(columnIndex).getType());
+        schema.getColumn(columnIndex).getType()
+    );
 
     if (actual.getType() != expected.getType())
-=======
-    // ------------------------------------
-    // NUMBER literal
-    // ------------------------------------
-
-    if (condition.value.type ==
-        LiteralType::NUMBER)
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     {
-        throw std::runtime_error("WHERE value type mismatch");
+        throw std::runtime_error(
+            "WHERE value type mismatch"
+        );
     }
 
     ComparisonOperator op = condition.op;
 
     switch (actual.getType())
     {
-    case DataType::INT:
-    {
-        int a = actual.asInt();
-        int b = expected.asInt();
-
-        switch (op)
+        case DataType::INT:
         {
-        case ComparisonOperator::EQUAL:
-            return a == b;
-        case ComparisonOperator::NOT_EQUAL:
-            return a != b;
-        case ComparisonOperator::GREATER:
-            return a > b;
-        case ComparisonOperator::LESS:
-            return a < b;
-        case ComparisonOperator::GREATER_EQUAL:
-            return a >= b;
-        case ComparisonOperator::LESS_EQUAL:
-            return a <= b;
+            int a = actual.asInt();
+            int b = expected.asInt();
+
+            switch (op)
+            {
+                case ComparisonOperator::EQUAL:
+                    return a == b;
+
+                case ComparisonOperator::NOT_EQUAL:
+                    return a != b;
+
+                case ComparisonOperator::GREATER:
+                    return a > b;
+
+                case ComparisonOperator::LESS:
+                    return a < b;
+
+                case ComparisonOperator::GREATER_EQUAL:
+                    return a >= b;
+
+                case ComparisonOperator::LESS_EQUAL:
+                    return a <= b;
+            }
+
+            break;
         }
-        break;
-    }
 
-    case DataType::DOUBLE:
-    {
-        double a = actual.asDouble();
-        double b = expected.asDouble();
-
-        switch (op)
+        case DataType::DOUBLE:
         {
-        case ComparisonOperator::EQUAL:
-            return a == b;
-        case ComparisonOperator::NOT_EQUAL:
-            return a != b;
-        case ComparisonOperator::GREATER:
-            return a > b;
-        case ComparisonOperator::LESS:
-            return a < b;
-        case ComparisonOperator::GREATER_EQUAL:
-            return a >= b;
-        case ComparisonOperator::LESS_EQUAL:
-            return a <= b;
+            double a = actual.asDouble();
+            double b = expected.asDouble();
+
+            switch (op)
+            {
+                case ComparisonOperator::EQUAL:
+                    return a == b;
+
+                case ComparisonOperator::NOT_EQUAL:
+                    return a != b;
+
+                case ComparisonOperator::GREATER:
+                    return a > b;
+
+                case ComparisonOperator::LESS:
+                    return a < b;
+
+                case ComparisonOperator::GREATER_EQUAL:
+                    return a >= b;
+
+                case ComparisonOperator::LESS_EQUAL:
+                    return a <= b;
+            }
+
+            break;
         }
-        break;
-    }
 
-    case DataType::VARCHAR:
-    {
-        const std::string &a = actual.asString();
-        const std::string &b = expected.asString();
-
-        switch (op)
+        case DataType::VARCHAR:
         {
-        case ComparisonOperator::EQUAL:
-            return a == b;
-        case ComparisonOperator::NOT_EQUAL:
-            return a != b;
-        case ComparisonOperator::GREATER:
-            return a > b;
-        case ComparisonOperator::LESS:
-            return a < b;
-        case ComparisonOperator::GREATER_EQUAL:
-            return a >= b;
-        case ComparisonOperator::LESS_EQUAL:
-            return a <= b;
+            const std::string& a = actual.asString();
+            const std::string& b = expected.asString();
+
+            switch (op)
+            {
+                case ComparisonOperator::EQUAL:
+                    return a == b;
+
+                case ComparisonOperator::NOT_EQUAL:
+                    return a != b;
+
+                case ComparisonOperator::GREATER:
+                    return a > b;
+
+                case ComparisonOperator::LESS:
+                    return a < b;
+
+                case ComparisonOperator::GREATER_EQUAL:
+                    return a >= b;
+
+                case ComparisonOperator::LESS_EQUAL:
+                    return a <= b;
+            }
+
+            break;
         }
-        break;
-    }
 
-    case DataType::BOOLEAN:
-    {
-        bool a = actual.asBool();
-        bool b = expected.asBool();
-
-        switch (op)
+        case DataType::BOOLEAN:
         {
-        case ComparisonOperator::EQUAL:
-            return a == b;
-        case ComparisonOperator::NOT_EQUAL:
-            return a != b;
-        default:
-            throw std::runtime_error(
-                "Ordering comparisons are not supported for BOOLEAN");
+            bool a = actual.asBool();
+            bool b = expected.asBool();
+
+            switch (op)
+            {
+                case ComparisonOperator::EQUAL:
+                    return a == b;
+
+                case ComparisonOperator::NOT_EQUAL:
+                    return a != b;
+
+                default:
+                    throw std::runtime_error(
+                        "Ordering comparisons are not supported for BOOLEAN"
+                    );
+            }
         }
-    }
-<<<<<<< HEAD
-=======
-
-    // ------------------------------------
-    // STRING literal
-    // ------------------------------------
-
-    if (condition.value.type ==
-        LiteralType::STRING)
-    {
-        std::string left =
-            rowValue.asString();
-
-        std::string right =
-            condition.value.value;
-
-        switch (condition.op)
-        {
-            case ComparisonOperator::EQUAL:
-                return left == right;
-
-            case ComparisonOperator::NOT_EQUAL:
-                return left != right;
-
-            case ComparisonOperator::GREATER:
-                return left > right;
-
-            case ComparisonOperator::LESS:
-                return left < right;
-
-            case ComparisonOperator::GREATER_EQUAL:
-                return left >= right;
-
-            case ComparisonOperator::LESS_EQUAL:
-                return left <= right;
-        }
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     }
 
     throw std::runtime_error("Unsupported comparison operator");
 }
 
-<<<<<<< HEAD
-// Convert a SQL literal into the requested core Value type.
-Value Executor::convertLiteral(
-    const Literal &literal,
-    DataType expectedType)
-{
-    try
-=======
-// ----------------------------------------
+// --------------------------------------------------
 // Execute SELECT
-// ----------------------------------------
+// --------------------------------------------------
 
-void Executor::executeSelect(
-    const SelectQuery& query
-)
-{
-    // ------------------------------------
-    // Open table
-    // ------------------------------------
-
-    GenericTable table =
-        openTable(query.tableName);
-
-    const Schema& schema =
-        table.getSchema();
-
-    // ------------------------------------
-    // Determine requested columns
-    // ------------------------------------
-
-    std::vector<int> columnIndexes;
-
-    // SELECT *
-    if (query.columns.size() == 1 &&
-        query.columns[0] == "*")
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
-    {
-        switch (expectedType)
-        {
-        case DataType::INT:
-        {
-            if (literal.type != LiteralType::NUMBER)
-                throw std::runtime_error("Expected an integer");
-
-            std::size_t pos = 0;
-            int value = std::stoi(literal.value, &pos);
-
-            if (pos != literal.value.size())
-                throw std::runtime_error("Invalid integer: " + literal.value);
-
-            return Value(value);
-        }
-
-        case DataType::DOUBLE:
-        {
-            if (literal.type != LiteralType::NUMBER)
-                throw std::runtime_error("Expected a number");
-
-            std::size_t pos = 0;
-            double value = std::stod(literal.value, &pos);
-
-            if (pos != literal.value.size())
-                throw std::runtime_error("Invalid number: " + literal.value);
-
-            return Value(value);
-        }
-
-        case DataType::VARCHAR:
-        {
-            if (literal.type != LiteralType::STRING)
-                throw std::runtime_error("Expected a quoted string");
-
-            return Value(literal.value);
-        }
-
-        case DataType::BOOLEAN:
-        {
-            std::string value = literal.value;
-
-            std::transform(
-                value.begin(),
-                value.end(),
-                value.begin(),
-                [](unsigned char c)
-                {
-                    return static_cast<char>(std::tolower(c));
-                });
-
-            if (value == "true")
-                return Value(true);
-
-            if (value == "false")
-                return Value(false);
-
-            throw std::runtime_error(
-                "Expected TRUE or FALSE for BOOLEAN");
-        }
-        }
-    }
-<<<<<<< HEAD
-    catch (const std::invalid_argument &)
-    {
-        throw std::runtime_error(
-            "Invalid literal: " + literal.value);
-    }
-    catch (const std::out_of_range &)
-    {
-        throw std::runtime_error(
-            "Literal is out of range: " + literal.value);
-    }
-
-    throw std::runtime_error("Unsupported literal datatype");
-}
-
-// Execute SELECT queries.
-void Executor::executeSelect(const SelectQuery &query)
+void Executor::executeSelect(const SelectQuery& query)
 {
     GenericTable table = openTable(query.tableName);
-    const Schema &schema = table.getSchema();
+    const Schema& schema = table.getSchema();
 
     std::vector<int> selectedColumns;
 
+    // SELECT *
     if (query.columns.size() == 1 && query.columns[0] == "*")
     {
         for (int i = 0; i < schema.size(); ++i)
+        {
             selectedColumns.push_back(i);
+        }
     }
     else
     {
-        for (const std::string &columnName : query.columns)
-=======
-    // SELECT name, age, ...
-    else
-    {
-        for (const std::string& column :
-             query.columns)
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
+        for (const std::string& columnName : query.columns)
         {
             int index = schema.getColumnIndex(columnName);
 
             if (index < 0)
+            {
                 throw std::runtime_error(
-<<<<<<< HEAD
-                    "Column does not exist: " + columnName);
-=======
-                    "Unknown column: " +
-                    column
+                    "Column does not exist: " + columnName
                 );
             }
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
 
             selectedColumns.push_back(index);
         }
     }
 
-<<<<<<< HEAD
-    // Print selected column headers.
+    // Print column headers
     for (std::size_t i = 0; i < selectedColumns.size(); ++i)
-=======
-    // ------------------------------------
-    // Scan rows
-    // ------------------------------------
-
-    int rowCount =
-        table.size();
-
-    int rowsReturned = 0;
-
-    for (int i = 0;
-         i < rowCount;
-         i++)
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
     {
         if (i > 0)
             std::cout << " | ";
 
-<<<<<<< HEAD
         std::cout << schema.getColumn(selectedColumns[i]).getName();
     }
 
@@ -550,25 +424,25 @@ void Executor::executeSelect(const SelectQuery &query)
             if (j > 0)
                 std::cout << " | ";
 
-            const Value &value = row.getValue(selectedColumns[j]);
+            const Value& value = row.getValue(selectedColumns[j]);
 
             switch (value.getType())
             {
-            case DataType::INT:
-                std::cout << value.asInt();
-                break;
+                case DataType::INT:
+                    std::cout << value.asInt();
+                    break;
 
-            case DataType::DOUBLE:
-                std::cout << value.asDouble();
-                break;
+                case DataType::DOUBLE:
+                    std::cout << value.asDouble();
+                    break;
 
-            case DataType::BOOLEAN:
-                std::cout << (value.asBool() ? "TRUE" : "FALSE");
-                break;
+                case DataType::BOOLEAN:
+                    std::cout << (value.asBool() ? "TRUE" : "FALSE");
+                    break;
 
-            case DataType::VARCHAR:
-                std::cout << value.asString();
-                break;
+                case DataType::VARCHAR:
+                    std::cout << value.asString();
+                    break;
             }
         }
 
@@ -579,18 +453,27 @@ void Executor::executeSelect(const SelectQuery &query)
     std::cout << printedRows << " row(s) selected.\n";
 }
 
-// Execute INSERT queries.
-void Executor::executeInsert(const InsertQuery &query)
+// --------------------------------------------------
+// Execute INSERT
+// --------------------------------------------------
+
+void Executor::executeInsert(const InsertQuery& query)
 {
     if (!catalog.tableExists(query.tableName))
+    {
         throw std::runtime_error(
-            "Table does not exist: " + query.tableName);
+            "Table does not exist: " + query.tableName
+        );
+    }
 
     Schema schema = catalog.getSchema(query.tableName);
 
     if (query.values.size() != static_cast<std::size_t>(schema.size()))
+    {
         throw std::runtime_error(
-            "Column count does not match value count");
+            "Column count does not match value count"
+        );
+    }
 
     Row row;
 
@@ -600,7 +483,8 @@ void Executor::executeInsert(const InsertQuery &query)
 
         Value value = convertLiteral(
             query.values[i],
-            expectedType);
+            expectedType
+        );
 
         row.addValue(value);
     }
@@ -608,146 +492,35 @@ void Executor::executeInsert(const InsertQuery &query)
     GenericTable table = openTable(query.tableName);
 
     if (!table.insert(row))
+    {
         throw std::runtime_error("Failed to insert row");
+    }
 
     std::cout << "1 row inserted.\n";
 }
 
-// Dispatch parsed SQL queries to their execution methods.
-void Executor::execute(const Query &query)
-=======
-        // --------------------------------
-        // WHERE
-        // --------------------------------
+// --------------------------------------------------
+// Execute UPDATE
+// --------------------------------------------------
 
-        if (query.hasCondition)
-        {
-            if (!evaluateCondition(
-                    row,
-                    schema,
-                    query.condition))
-            {
-                continue;
-            }
-        }
-
-        // --------------------------------
-        // Projection
-        // --------------------------------
-
-        for (int j = 0;
-             j < columnIndexes.size();
-             j++)
-        {
-            Value value =
-                row.getValue(
-                    columnIndexes[j]
-                );
-
-            printValue(value);
-
-            if (j + 1 < columnIndexes.size())
-            {
-                std::cout << " | ";
-            }
-        }
-
-        std::cout << "\n";
-
-        // --------------------------------
-        // LIMIT
-        // --------------------------------
-
-        rowsReturned++;
-
-        if (query.limit >= 0 &&
-            rowsReturned >= query.limit)
-        {
-            break;
-        }
-    }
-}
-
-void Executor::execute(
-    const Query& query
-)
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
-{
-    if (query.type == QueryType::SELECT)
-    {
-        executeSelect(query.select);
-        return;
-    }
-
-    if (query.type == QueryType::CREATE_TABLE)
-    {
-<<<<<<< HEAD
-        const CreateTableQuery &createQuery = query.createTable;
-
-        if (catalog.tableExists(createQuery.tableName))
-            throw std::runtime_error(
-                "Table already exists: " + createQuery.tableName);
-
-        Schema schema;
-
-        for (const ColumnDefinition &column : createQuery.columns)
-        {
-            DataType type = parseDataType(column.type);
-            schema.addColumn(column.name, type);
-        }
-
-        bool success = catalog.createTable(
-            createQuery.tableName,
-            schema);
-
-        if (!success)
-            throw std::runtime_error(
-                "Failed to create table: " + createQuery.tableName);
-
-        catalogStorage.save(catalog);
-        
-        std::cout << "Table '"
-                  << createQuery.tableName
-                  << "' created successfully.\n";
-        return;
-    }
-
-    if (query.type == QueryType::INSERT)
-    {
-        executeInsert(query.insert);
-        return;
-    }
-
-    if (query.type == QueryType::UPDATE)
-    {
-        executeUpdate(query.update);
-        return;
-    }
-
-    if (query.type == QueryType::DELETE)
-    {
-        executeDelete(query.remove);
-        return;
-    }
-    throw std::runtime_error("Unsupported query type");
-}
-
-void Executor::executeUpdate(const UpdateQuery &query)
+void Executor::executeUpdate(const UpdateQuery& query)
 {
     GenericTable table = openTable(query.tableName);
-    const Schema &schema = table.getSchema();
+    const Schema& schema = table.getSchema();
 
     int columnIndex = schema.getColumnIndex(query.column);
 
     if (columnIndex < 0)
     {
         throw std::runtime_error(
-            "Column does not exist: " + query.column);
+            "Column does not exist: " + query.column
+        );
     }
 
     Value newValue = convertLiteral(
         query.value,
-        schema.getColumn(columnIndex).getType());
+        schema.getColumn(columnIndex).getType()
+    );
 
     int updatedCount = 0;
     int totalRows = table.size();
@@ -775,8 +548,8 @@ void Executor::executeUpdate(const UpdateQuery &query)
         if (!table.updateRow(i, updatedRow))
         {
             throw std::runtime_error(
-                "Could not update row " + std::to_string(i) +
-                ". The updated record may not fit in its page.");
+                "Could not update row " + std::to_string(i)
+            );
         }
 
         ++updatedCount;
@@ -785,7 +558,11 @@ void Executor::executeUpdate(const UpdateQuery &query)
     std::cout << updatedCount << " row(s) updated.\n";
 }
 
-void Executor::executeDelete(const DeleteQuery &query)
+// --------------------------------------------------
+// Execute DELETE
+// --------------------------------------------------
+
+void Executor::executeDelete(const DeleteQuery& query)
 {
     GenericTable table = openTable(query.tableName);
 
@@ -806,7 +583,8 @@ void Executor::executeDelete(const DeleteQuery &query)
         if (!table.deleteRow(index))
         {
             throw std::runtime_error(
-                "Could not delete row " + std::to_string(index));
+                "Could not delete row " + std::to_string(index)
+            );
         }
 
         ++deletedCount;
@@ -814,57 +592,77 @@ void Executor::executeDelete(const DeleteQuery &query)
 
     std::cout << deletedCount << " row(s) deleted.\n";
 }
-=======
-        const CreateTableQuery& createQuery =
-            query.createTable;
 
-        if (catalog.tableExists(
-                createQuery.tableName))
+// --------------------------------------------------
+// Execute parsed SQL query
+// --------------------------------------------------
+
+void Executor::execute(const Query& query)
+{
+    if (query.type == QueryType::SELECT)
+    {
+        executeSelect(query.select);
+        return;
+    }
+
+    if (query.type == QueryType::CREATE_TABLE)
+    {
+        const CreateTableQuery& createQuery = query.createTable;
+
+        if (catalog.tableExists(createQuery.tableName))
         {
             throw std::runtime_error(
-                "Table already exists: " +
-                createQuery.tableName
+                "Table already exists: " + createQuery.tableName
             );
         }
 
         Schema schema;
 
-        for (const ColumnDefinition& column :
-             createQuery.columns)
+        for (const ColumnDefinition& column : createQuery.columns)
         {
-            DataType type =
-                parseDataType(column.type);
+            DataType type = parseDataType(column.type);
 
-            schema.addColumn(
-                column.name,
-                type
-            );
+            schema.addColumn(column.name, type);
         }
 
-        bool success =
-            catalog.createTable(
-                createQuery.tableName,
-                schema
-            );
+        bool success = catalog.createTable(
+            createQuery.tableName,
+            schema
+        );
 
         if (!success)
         {
             throw std::runtime_error(
-                "Failed to create table: " +
-                createQuery.tableName
+                "Failed to create table: " + createQuery.tableName
             );
         }
 
-        std::cout
-            << "Table '"
-            << createQuery.tableName
-            << "' created successfully.\n";
+        catalogStorage.save(catalog);
+
+        std::cout << "Table '"
+                  << createQuery.tableName
+                  << "' created successfully.\n";
 
         return;
     }
 
-    throw std::runtime_error(
-        "Unsupported query type"
-    );
+    if (query.type == QueryType::INSERT)
+    {
+        executeInsert(query.insert);
+        return;
+    }
+
+    if (query.type == QueryType::UPDATE)
+    {
+        executeUpdate(query.update);
+        return;
+    }
+
+    if (query.type == QueryType::DELETE)
+    {
+        executeDelete(query.remove);
+        return;
+    }
+
+    throw std::runtime_error("Unsupported query type");
 }
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22

@@ -1,5 +1,8 @@
+
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
+
+#include <string>
 
 #include "../../core/pager/pager.h"
 #include "../../core/buffer/buffer_pool.h"
@@ -7,29 +10,27 @@
 #include "../../core/catalog/catalog.h"
 #include "../../core/table/generic_table.h"
 #include "../../core/catalog/catalog_storage.h"
+
 #include "../../record/row.h"
 #include "../ast/query.h"
 
 class Executor
 {
 private:
-    Pager &pager;
-    BufferPool &bufferPool;
-    PageAllocator &pageAllocator;
-    Catalog &catalog;
-    CatalogStorage &catalogStorage;
+    Pager& pager;
+    BufferPool& bufferPool;
+    PageAllocator& pageAllocator;
+    Catalog& catalog;
+    CatalogStorage& catalogStorage;
 
-    GenericTable openTable(
-        const std::string &tableName
-    );
+    GenericTable openTable(const std::string& tableName);
 
     bool evaluateCondition(
-        const Row &row,
-        const Schema &schema,
-        const Condition &condition
+        const Row& row,
+        const Schema& schema,
+        const Condition& condition
     );
 
-<<<<<<< HEAD
     Value convertLiteral(
         const Literal& literal,
         DataType expectedType
@@ -39,22 +40,17 @@ private:
     void executeInsert(const InsertQuery& query);
     void executeUpdate(const UpdateQuery& query);
     void executeDelete(const DeleteQuery& query);
-=======
-    void executeSelect(
-        const SelectQuery& query
-    );
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
-    
+
 public:
     Executor(
-        Pager &pager,
-        BufferPool &bufferPool,
-        PageAllocator &pageAllocator,
-        Catalog &catalog,
-        CatalogStorage &CatalogStorage);
+        Pager& pager,
+        BufferPool& bufferPool,
+        PageAllocator& pageAllocator,
+        Catalog& catalog,
+        CatalogStorage& catalogStorage
+    );
 
-    void execute(
-        const Query& query);
+    void execute(const Query& query);
 };
 
 #endif
