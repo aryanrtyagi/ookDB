@@ -7,6 +7,7 @@
 
 #include "../../record/row.h"
 #include "../../record/schema.h"
+#include "../../record/record_id.h"
 #include "../../storage/record_page.h"
 
 class GenericTable
@@ -17,8 +18,10 @@ private:
     PageAllocator& pageAllocator;
 
     Schema schema;
-
     int firstPage;
+
+    // Check whether a page belongs to this table.
+    bool containsPage(int targetPage);
 
 public:
 
@@ -30,17 +33,30 @@ public:
         int firstPage
     );
 
+    // Existing logical-index API.
     bool insert(const Row& row);
 
     Row get(int index);
+
+    bool updateRow(int index, const Row& row);
+
+    bool deleteRow(int index);
 
     int size();
 
     const Schema& getSchema() const;
 
-    bool updateRow(int index, const Row& row);
+    // New stable RecordId API.
+    RecordId insertWithId(const Row& row);
 
-    bool deleteRow(int index);
+    Row get(const RecordId& rid);
+
+    bool updateRow(
+        const RecordId& rid,
+        const Row& row
+    );
+
+    bool deleteRow(const RecordId& rid);
 };
 
 #endif

@@ -2,7 +2,6 @@
 
 #include <stdexcept>
 
-
 GenericTable::GenericTable(
     Pager& pager,
     BufferPool& bufferPool,
@@ -20,78 +19,237 @@ GenericTable::GenericTable(
 
 
 // ============================================================
-// Insert
+// Check whether page belongs to this table
 // ============================================================
 
-bool GenericTable::insert(const Row& row)
+bool GenericTable::containsPage(int targetPage)
 {
-    int pageNumber = firstPage;
+    int currentPage = firstPage;
 
-    while (true)
+    while (currentPage != -1)
     {
-        char* pageData =
-            bufferPool.getPage(pageNumber);
+        if (currentPage == targetPage)
+            return true;
+
+        char* pageData = bufferPool.getPage(currentPage);
 
         if (pageData == nullptr)
-        {
             return false;
-        }
 
         RecordPage page(pageData);
 
-        // Try inserting into current page
-        if (page.insert(row))
+        currentPage = page.getNextPage();
+    }
+
+    return false;
+}
+
+
+// ============================================================
+// Insert using stable RecordId
+// ============================================================
+
+RecordId GenericTable::insertWithId(const Row& row)
+{
+    int pageNumber = firstPage;
+
+    while (pageNumber != -1)
+    {
+        char* pageData = bufferPool.getPage(pageNumber);
+
+        if (pageData == nullptr)
+            return RecordId();
+
+        RecordPage page(pageData);
+
+        uint32_t slotNumber = 0;
+        uint32_t generation = 0;
+
+        // Try inserting into the current page.
+        if (page.insert(row, slotNumber, generation))
         {
             bufferPool.markDirty(pageNumber);
-            return true;
+
+            return RecordId(
+                pageNumber,
+                slotNumber,
+                generation
+            );
         }
 
-        // Current page is full.
         int nextPage = page.getNextPage();
 
-        // Another page already belongs to this table.
+        // Continue if another page already exists.
         if (nextPage != -1)
         {
             pageNumber = nextPage;
             continue;
         }
 
-        // No next page.
-        // Allocate a completely new page.
-        int newPage =
-            pageAllocator.allocatePage();
+        // Current page is full and has no next page.
+        int newPageNumber = pageAllocator.allocatePage();
 
-        // Link current page to new page.
-        page.setNextPage(newPage);
+        if (newPageNumber < 0)
+            return RecordId();
+
+        // Link the new page.
+        page.setNextPage(newPageNumber);
 
         bufferPool.markDirty(pageNumber);
 
-        // Load the new page.
         char* newPageData =
-            bufferPool.getPage(newPage);
+            bufferPool.getPage(newPageNumber);
 
         if (newPageData == nullptr)
+            return RecordId();
+
+        RecordPage newPage(newPageData);
+
+        // Insert into the newly allocated page.
+        if (!newPage.insert(
+                row,
+                slotNumber,
+                generation
+            ))
         {
-            return false;
+            return RecordId();
         }
 
-        RecordPage newRecordPage(newPageData);
+        bufferPool.markDirty(newPageNumber);
 
-        // New page must be empty.
-        if (!newRecordPage.insert(row))
-        {
-            return false;
-        }
-
-        bufferPool.markDirty(newPage);
-
-        return true;
+        return RecordId(
+            newPageNumber,
+            slotNumber,
+            generation
+        );
     }
+
+    return RecordId();
 }
 
 
 // ============================================================
-// Get Row
+// Existing insert API
+// ============================================================
+
+bool GenericTable::insert(const Row& row)
+{
+    RecordId rid = insertWithId(row);
+
+    return rid.isValid();
+}
+
+
+// ============================================================
+// Retrieve using RecordId
+// ============================================================
+
+Row GenericTable::get(const RecordId& rid)
+{
+    if (!rid.isValid())
+    {
+        throw std::out_of_range(
+            "Invalid RecordId"
+        );
+    }
+
+    if (!containsPage(rid.pageNumber))
+    {
+        throw std::out_of_range(
+            "RecordId does not belong to this table"
+        );
+    }
+
+    char* pageData = bufferPool.getPage(rid.pageNumber);
+
+    if (pageData == nullptr)
+    {
+        throw std::runtime_error(
+            "Could not load record page"
+        );
+    }
+
+    RecordPage page(pageData);
+
+    return page.getBySlot(
+        rid.slotNumber,
+        rid.generation
+    );
+}
+
+
+// ============================================================
+// Update using RecordId
+// ============================================================
+
+bool GenericTable::updateRow(
+    const RecordId& rid,
+    const Row& row
+)
+{
+    if (!rid.isValid())
+        return false;
+
+    if (!containsPage(rid.pageNumber))
+        return false;
+
+    char* pageData = bufferPool.getPage(rid.pageNumber);
+
+    if (pageData == nullptr)
+        return false;
+
+    RecordPage page(pageData);
+
+    if (!page.updateBySlot(
+            rid.slotNumber,
+            rid.generation,
+            row
+        ))
+    {
+        return false;
+    }
+
+    bufferPool.markDirty(rid.pageNumber);
+
+    return true;
+}
+
+
+// ============================================================
+// Delete using RecordId
+// ============================================================
+
+bool GenericTable::deleteRow(const RecordId& rid)
+{
+    if (!rid.isValid())
+        return false;
+
+    if (!containsPage(rid.pageNumber))
+        return false;
+
+    char* pageData = bufferPool.getPage(rid.pageNumber);
+
+    if (pageData == nullptr)
+        return false;
+
+    RecordPage page(pageData);
+
+    if (!page.eraseBySlot(
+            rid.slotNumber,
+            rid.generation
+        ))
+    {
+        return false;
+    }
+
+    bufferPool.markDirty(rid.pageNumber);
+
+    return true;
+}
+
+
+// ============================================================
+// Existing logical-index get
 // ============================================================
 
 Row GenericTable::get(int index)
@@ -104,13 +262,11 @@ Row GenericTable::get(int index)
     }
 
     int remaining = index;
-
     int pageNumber = firstPage;
 
     while (pageNumber != -1)
     {
-        char* pageData =
-            bufferPool.getPage(pageNumber);
+        char* pageData = bufferPool.getPage(pageNumber);
 
         if (pageData == nullptr)
         {
@@ -124,9 +280,7 @@ Row GenericTable::get(int index)
         int count = page.size();
 
         if (remaining < count)
-        {
             return page.get(remaining);
-        }
 
         remaining -= count;
 
@@ -139,7 +293,14 @@ Row GenericTable::get(int index)
 }
 
 
-bool GenericTable::updateRow(int index, const Row& row)
+// ============================================================
+// Existing logical-index update
+// ============================================================
+
+bool GenericTable::updateRow(
+    int index,
+    const Row& row
+)
 {
     if (index < 0)
         return false;
@@ -152,9 +313,10 @@ bool GenericTable::updateRow(int index, const Row& row)
         char* pageData = bufferPool.getPage(pageNumber);
 
         if (pageData == nullptr)
-            throw std::runtime_error("Could not load page");
+            return false;
 
         RecordPage page(pageData);
+
         int count = page.size();
 
         if (remaining < count)
@@ -163,15 +325,22 @@ bool GenericTable::updateRow(int index, const Row& row)
                 return false;
 
             bufferPool.markDirty(pageNumber);
+
             return true;
         }
 
         remaining -= count;
+
         pageNumber = page.getNextPage();
     }
 
     return false;
 }
+
+
+// ============================================================
+// Existing logical-index delete
+// ============================================================
 
 bool GenericTable::deleteRow(int index)
 {
@@ -186,9 +355,10 @@ bool GenericTable::deleteRow(int index)
         char* pageData = bufferPool.getPage(pageNumber);
 
         if (pageData == nullptr)
-            throw std::runtime_error("Could not load page");
+            return false;
 
         RecordPage page(pageData);
+
         int count = page.size();
 
         if (remaining < count)
@@ -197,18 +367,21 @@ bool GenericTable::deleteRow(int index)
                 return false;
 
             bufferPool.markDirty(pageNumber);
+
             return true;
         }
 
         remaining -= count;
+
         pageNumber = page.getNextPage();
     }
 
     return false;
 }
 
+
 // ============================================================
-// Number of rows
+// Number of active rows
 // ============================================================
 
 int GenericTable::size()
@@ -219,13 +392,10 @@ int GenericTable::size()
 
     while (pageNumber != -1)
     {
-        char* pageData =
-            bufferPool.getPage(pageNumber);
+        char* pageData = bufferPool.getPage(pageNumber);
 
         if (pageData == nullptr)
-        {
             break;
-        }
 
         RecordPage page(pageData);
 
