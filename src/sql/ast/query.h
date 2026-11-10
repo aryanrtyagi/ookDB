@@ -1,3 +1,4 @@
+
 #ifndef QUERY_H
 #define QUERY_H
 
@@ -6,22 +7,15 @@
 
 #include "expression.h"
 
-// ============================================================
-// Query Type
-// ============================================================
-
 enum class QueryType
 {
     CREATE_TABLE,
+    CREATE_INDEX,
     INSERT,
     SELECT,
     UPDATE,
     DELETE
 };
-
-// ============================================================
-// Column Definition
-// ============================================================
 
 struct ColumnDefinition
 {
@@ -29,19 +23,18 @@ struct ColumnDefinition
     std::string type;
 };
 
-// ============================================================
-// CREATE TABLE
-// ============================================================
-
 struct CreateTableQuery
 {
     std::string tableName;
     std::vector<ColumnDefinition> columns;
 };
 
-// ============================================================
-// INSERT
-// ============================================================
+struct CreateIndexQuery
+{
+    std::string indexName;
+    std::string tableName;
+    std::string columnName;
+};
 
 struct InsertQuery
 {
@@ -49,40 +42,28 @@ struct InsertQuery
     std::vector<Literal> values;
 };
 
-// ============================================================
-// SELECT
-// ============================================================
-
 struct SelectQuery
 {
     std::string tableName;
     std::vector<std::string> columns;
-    bool hasCondition;
+    bool hasCondition = false;
     Condition condition;
-    int limit;
+    int limit = -1;
 };
-
-// ============================================================
-// UPDATE
-// ============================================================
 
 struct UpdateQuery
 {
     std::string tableName;
     std::string column;
     Literal value;
-    bool hasCondition;
+    bool hasCondition = false;
     Condition condition;
 };
-
-// ============================================================
-// DELETE
-// ============================================================
 
 struct DeleteQuery
 {
     std::string tableName;
-    bool hasCondition;
+    bool hasCondition = false;
     Condition condition;
 };
 
@@ -91,9 +72,11 @@ struct Query
     QueryType type;
 
     CreateTableQuery createTable;
+    CreateIndexQuery createIndex;
     InsertQuery insert;
     SelectQuery select;
     UpdateQuery update;
     DeleteQuery remove;
 };
+
 #endif

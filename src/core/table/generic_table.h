@@ -10,6 +10,8 @@
 #include "../../record/record_id.h"
 #include "../../storage/record_page.h"
 
+#include <vector>
+
 class GenericTable
 {
 private:
@@ -46,7 +48,7 @@ public:
 
     const Schema& getSchema() const;
 
-    // New stable RecordId API.
+    // Stable RecordId API.
     RecordId insertWithId(const Row& row);
 
     Row get(const RecordId& rid);
@@ -57,6 +59,9 @@ public:
     );
 
     bool deleteRow(const RecordId& rid);
+
+    // Enumerate all active records using stable identifiers.
+    std::vector<RecordId> getAllRecordIds();
 };
 
 #endif

@@ -1,3 +1,4 @@
+
 #ifndef PARSER_H
 #define PARSER_H
 
@@ -13,7 +14,7 @@ private:
     std::vector<Token> tokens;
     size_t position;
 
-    const Token &currentToken() const;
+    const Token& currentToken() const;
 
     bool check(TokenType type) const;
 
@@ -33,17 +34,13 @@ private:
 
     SelectQuery parseSelect();
     CreateTableQuery parseCreateTable();
+    CreateIndexQuery parseCreateIndex();
     InsertQuery parseInsert();
     UpdateQuery parseUpdate();
     DeleteQuery parseDelete();
 
-    CreateTableQuery parseCreateTable();
-
-    InsertQuery parseInsert();
-
 public:
-    explicit Parser(
-        const std::vector<Token> &tokens);
+    explicit Parser(const std::vector<Token>& tokens);
 
     Query parse();
 };

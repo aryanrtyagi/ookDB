@@ -6,7 +6,7 @@
 // ============================================================
 
 Lexer::Lexer(
-    const std::string& input)
+    const std::string &input)
     : input(input),
       position(0)
 {
@@ -25,7 +25,6 @@ char Lexer::currentChar() const
 
     return input[position];
 }
-
 
 // ============================================================
 // Skip Whitespace
@@ -53,29 +52,24 @@ Token Lexer::readIdentifierOrKeyword()
 
     while (
         position < input.size() &&
-        (
-            std::isalnum(
-                static_cast<unsigned char>(
-                    input[position]))
-            ||
-            input[position] == '_'
-        ))
+        (std::isalnum(
+             static_cast<unsigned char>(
+                 input[position])) ||
+         input[position] == '_'))
     {
         value += input[position];
         position++;
     }
 
-
     // Convert to uppercase for keyword comparison.
     std::string upper = value;
 
-    for (char& c : upper)
+    for (char &c : upper)
     {
         c = static_cast<char>(
             std::toupper(
                 static_cast<unsigned char>(c)));
     }
-
 
     if (upper == "SELECT")
         return {TokenType::SELECT, value};
@@ -113,13 +107,16 @@ Token Lexer::readIdentifierOrKeyword()
     if (upper == "LIMIT")
         return {TokenType::LIMIT, value};
 
+    if (upper == "INDEX")
+        return {TokenType::INDEX, value};
+
+    if (upper == "ON")
+        return {TokenType::ON, value};
 
     return {
         TokenType::IDENTIFIER,
-        value
-    };
+        value};
 }
-
 
 // ============================================================
 // Read Number
@@ -155,8 +152,7 @@ Token Lexer::readNumber()
 
     return {
         TokenType::NUMBER,
-        value
-    };
+        value};
 }
 
 // ============================================================
@@ -190,8 +186,7 @@ Token Lexer::readString()
 
     return {
         TokenType::STRING,
-        value
-    };
+        value};
 }
 
 // ============================================================
@@ -201,7 +196,6 @@ Token Lexer::readString()
 Token Lexer::readOperatorOrSymbol()
 {
     char c = currentChar();
-
 
     // ----------------------------------------
     // =
@@ -213,10 +207,8 @@ Token Lexer::readOperatorOrSymbol()
 
         return {
             TokenType::EQUAL,
-            "="
-        };
+            "="};
     }
-
 
     // ----------------------------------------
     // >
@@ -232,16 +224,13 @@ Token Lexer::readOperatorOrSymbol()
 
             return {
                 TokenType::GREATER_EQUAL,
-                ">="
-            };
+                ">="};
         }
 
         return {
             TokenType::GREATER,
-            ">"
-        };
+            ">"};
     }
-
 
     // ----------------------------------------
     // <
@@ -257,16 +246,13 @@ Token Lexer::readOperatorOrSymbol()
 
             return {
                 TokenType::LESS_EQUAL,
-                "<="
-            };
+                "<="};
         }
 
         return {
             TokenType::LESS,
-            "<"
-        };
+            "<"};
     }
-
 
     // ----------------------------------------
     // !
@@ -282,16 +268,13 @@ Token Lexer::readOperatorOrSymbol()
 
             return {
                 TokenType::NOT_EQUAL,
-                "!="
-            };
+                "!="};
         }
 
         return {
             TokenType::INVALID,
-            "!"
-        };
+            "!"};
     }
-
 
     // ----------------------------------------
     // *
@@ -303,10 +286,8 @@ Token Lexer::readOperatorOrSymbol()
 
         return {
             TokenType::STAR,
-            "*"
-        };
+            "*"};
     }
-
 
     // ----------------------------------------
     // (
@@ -318,10 +299,8 @@ Token Lexer::readOperatorOrSymbol()
 
         return {
             TokenType::LEFT_PAREN,
-            "("
-        };
+            "("};
     }
-
 
     // ----------------------------------------
     // )
@@ -333,10 +312,8 @@ Token Lexer::readOperatorOrSymbol()
 
         return {
             TokenType::RIGHT_PAREN,
-            ")"
-        };
+            ")"};
     }
-
 
     // ----------------------------------------
     // ,
@@ -348,10 +325,8 @@ Token Lexer::readOperatorOrSymbol()
 
         return {
             TokenType::COMMA,
-            ","
-        };
+            ","};
     }
-
 
     // ----------------------------------------
     // ;
@@ -363,10 +338,8 @@ Token Lexer::readOperatorOrSymbol()
 
         return {
             TokenType::SEMICOLON,
-            ";"
-        };
+            ";"};
     }
-
 
     // ----------------------------------------
     // Invalid
@@ -376,10 +349,8 @@ Token Lexer::readOperatorOrSymbol()
 
     return {
         TokenType::INVALID,
-        std::string(1, c)
-    };
+        std::string(1, c)};
 }
-
 
 // ============================================================
 // Get Next Token
@@ -389,30 +360,24 @@ Token Lexer::nextToken()
 {
     skipWhitespace();
 
-
     // End of input.
     if (position >= input.size())
     {
         return {
             TokenType::END,
-            ""
-        };
+            ""};
     }
 
-
     char c = currentChar();
-
 
     // Identifier / keyword.
     if (
         std::isalpha(
-            static_cast<unsigned char>(c))
-        ||
+            static_cast<unsigned char>(c)) ||
         c == '_')
     {
         return readIdentifierOrKeyword();
     }
-
 
     // Number.
     if (
@@ -422,18 +387,15 @@ Token Lexer::nextToken()
         return readNumber();
     }
 
-
     // String.
     if (c == '\'' || c == '"')
     {
         return readString();
     }
 
-
     // Operator / symbol.
     return readOperatorOrSymbol();
 }
-
 
 // ============================================================
 // Tokenize Entire Input
@@ -458,7 +420,6 @@ std::vector<Token> Lexer::tokenize()
     return tokens;
 }
 
-
 // ============================================================
 // Token Type → String
 // ============================================================
@@ -468,89 +429,89 @@ std::string tokenTypeToString(
 {
     switch (type)
     {
-        case TokenType::SELECT:
-            return "SELECT";
+    case TokenType::SELECT:
+        return "SELECT";
 
-        case TokenType::FROM:
-            return "FROM";
+    case TokenType::FROM:
+        return "FROM";
 
-        case TokenType::WHERE:
-            return "WHERE";
+    case TokenType::WHERE:
+        return "WHERE";
 
-        case TokenType::INSERT:
-            return "INSERT";
+    case TokenType::INSERT:
+        return "INSERT";
 
-        case TokenType::INTO:
-            return "INTO";
+    case TokenType::INTO:
+        return "INTO";
 
-        case TokenType::VALUES:
-            return "VALUES";
+    case TokenType::VALUES:
+        return "VALUES";
 
-        case TokenType::UPDATE:
-            return "UPDATE";
+    case TokenType::UPDATE:
+        return "UPDATE";
 
-        case TokenType::SET:
-            return "SET";
+    case TokenType::SET:
+        return "SET";
 
-        case TokenType::DELETE:
-            return "DELETE";
+    case TokenType::DELETE:
+        return "DELETE";
 
-        case TokenType::CREATE:
-            return "CREATE";
+    case TokenType::CREATE:
+        return "CREATE";
 
-        case TokenType::TABLE:
-            return "TABLE";
+    case TokenType::TABLE:
+        return "TABLE";
 
-        case TokenType::LIMIT:
-            return "LIMIT";
+    case TokenType::LIMIT:
+        return "LIMIT";
 
-        case TokenType::IDENTIFIER:
-            return "IDENTIFIER";
+    case TokenType::IDENTIFIER:
+        return "IDENTIFIER";
 
-        case TokenType::NUMBER:
-            return "NUMBER";
+    case TokenType::NUMBER:
+        return "NUMBER";
 
-        case TokenType::STRING:
-            return "STRING";
+    case TokenType::STRING:
+        return "STRING";
 
-        case TokenType::EQUAL:
-            return "EQUAL";
+    case TokenType::EQUAL:
+        return "EQUAL";
 
-        case TokenType::GREATER:
-            return "GREATER";
+    case TokenType::GREATER:
+        return "GREATER";
 
-        case TokenType::LESS:
-            return "LESS";
+    case TokenType::LESS:
+        return "LESS";
 
-        case TokenType::GREATER_EQUAL:
-            return "GREATER_EQUAL";
+    case TokenType::GREATER_EQUAL:
+        return "GREATER_EQUAL";
 
-        case TokenType::LESS_EQUAL:
-            return "LESS_EQUAL";
+    case TokenType::LESS_EQUAL:
+        return "LESS_EQUAL";
 
-        case TokenType::NOT_EQUAL:
-            return "NOT_EQUAL";
+    case TokenType::NOT_EQUAL:
+        return "NOT_EQUAL";
 
-        case TokenType::STAR:
-            return "STAR";
+    case TokenType::STAR:
+        return "STAR";
 
-        case TokenType::LEFT_PAREN:
-            return "LEFT_PAREN";
+    case TokenType::LEFT_PAREN:
+        return "LEFT_PAREN";
 
-        case TokenType::RIGHT_PAREN:
-            return "RIGHT_PAREN";
+    case TokenType::RIGHT_PAREN:
+        return "RIGHT_PAREN";
 
-        case TokenType::COMMA:
-            return "COMMA";
+    case TokenType::COMMA:
+        return "COMMA";
 
-        case TokenType::SEMICOLON:
-            return "SEMICOLON";
+    case TokenType::SEMICOLON:
+        return "SEMICOLON";
 
-        case TokenType::END:
-            return "END";
+    case TokenType::END:
+        return "END";
 
-        case TokenType::INVALID:
-            return "INVALID";
+    case TokenType::INVALID:
+        return "INVALID";
     }
 
     return "UNKNOWN";

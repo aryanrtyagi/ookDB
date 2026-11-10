@@ -1,4 +1,3 @@
-
 #include "record_page.h"
 
 #include "../record/serializer.h"
@@ -537,7 +536,37 @@ bool RecordPage::isValidSlot(
     return getSlotGeneration(slotNumber) ==
         generation;
 }
+// ============================================================
+// Enumerate active slots
+// ============================================================
 
+std::vector<std::pair<uint32_t, uint32_t>>
+RecordPage::getLiveSlots() const
+{
+    std::vector<std::pair<uint32_t, uint32_t>> result;
+
+    if (pageData == nullptr ||
+        readUInt32(0) != MAGIC)
+    {
+        return result;
+    }
+
+    uint32_t slotCount = readUInt32(12);
+
+    for (uint32_t slot = 0; slot < slotCount; slot++)
+    {
+        // A zero length means that the slot is deleted.
+        if (getSlotLength(slot) == 0)
+            continue;
+
+        result.emplace_back(
+            slot,
+            getSlotGeneration(slot)
+        );
+    }
+
+    return result;
+}
 
 // ============================================================
 // Get by stable slot

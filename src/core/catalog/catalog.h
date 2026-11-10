@@ -15,18 +15,27 @@ struct TableMetadata
     int firstPage;
 };
 
+struct IndexMetadata
+{
+    std::string indexName;
+    std::string tableName;
+    std::string columnName;
+    std::string filePath;
+};
+
 class Catalog
 {
 private:
     std::vector<TableMetadata> tables;
+    std::vector<IndexMetadata> indexes;
 
-    // Page allocator used to assign storage pages to tables.
     PageAllocator& pageAllocator;
 
 public:
 
     explicit Catalog(PageAllocator& pageAllocator);
 
+    // Table operations.
     bool createTable(
         const std::string& name,
         const Schema& schema
@@ -49,15 +58,46 @@ public:
     const std::vector<TableMetadata>&
     getTables() const;
 
-    void clear();
-
-    // Restore an existing table from persisted catalog metadata.
-    // Does NOT allocate a new page.
     void restoreTable(
         const std::string& name,
         const Schema& schema,
         int firstPage
     );
+
+    // Index operations.
+    bool createIndex(
+        const std::string& indexName,
+        const std::string& tableName,
+        const std::string& columnName,
+        const std::string& filePath
+    );
+
+    bool indexExists(
+        const std::string& indexName
+    ) const;
+
+    bool hasIndex(
+        const std::string& tableName,
+        const std::string& columnName
+    ) const;
+
+    const IndexMetadata*
+    findIndex(
+        const std::string& tableName,
+        const std::string& columnName
+    ) const;
+
+    const std::vector<IndexMetadata>&
+    getIndexes() const;
+
+    void restoreIndex(
+        const std::string& indexName,
+        const std::string& tableName,
+        const std::string& columnName,
+        const std::string& filePath
+    );
+
+    void clear();
 };
 
 #endif

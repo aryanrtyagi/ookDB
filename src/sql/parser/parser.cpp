@@ -1,44 +1,31 @@
 #include "parser.h"
 
 #include <stdexcept>
+#include <string>
 
-Parser::Parser(
-    const std::vector<Token>& tokens)
-    : tokens(tokens),
-      position(0)
+Parser::Parser(const std::vector<Token>& tokens)
+    : tokens(tokens), position(0)
 {
 }
 
 const Token& Parser::currentToken() const
 {
     if (position >= tokens.size())
-    {
-        throw std::runtime_error(
-            "Unexpected end of input"
-        );
-    }
+        throw std::runtime_error("Unexpected end of input");
 
     return tokens[position];
 }
 
 bool Parser::check(TokenType type) const
 {
-    if (position >= tokens.size())
-    {
-        return false;
-    }
-
-    return currentToken().type == type;
+    return position < tokens.size() &&
+           currentToken().type == type;
 }
 
 Token Parser::consume()
 {
     if (position >= tokens.size())
-    {
-        throw std::runtime_error(
-            "Unexpected end of input"
-        );
-    }
+        throw std::runtime_error("Unexpected end of input");
 
     return tokens[position++];
 }
@@ -46,12 +33,9 @@ Token Parser::consume()
 bool Parser::match(TokenType type)
 {
     if (!check(type))
-    {
         return false;
-    }
 
     consume();
-
     return true;
 }
 
@@ -59,9 +43,13 @@ Token Parser::expect(TokenType type)
 {
     if (!check(type))
     {
+        std::string found =
+            position < tokens.size()
+                ? currentToken().value
+                : "END";
+
         throw std::runtime_error(
-            "Unexpected token: " +
-            currentToken().value
+            "Unexpected token: " + found
         );
     }
 
@@ -70,118 +58,71 @@ Token Parser::expect(TokenType type)
 
 std::string Parser::parseIdentifier()
 {
-    Token token = expect(
-        TokenType::IDENTIFIER
-    );
-
-    return token.value;
+    return expect(TokenType::IDENTIFIER).value;
 }
 
 Literal Parser::parseLiteral()
 {
     if (check(TokenType::NUMBER))
     {
-        Token token = consume();
-
         Literal literal;
-
-        literal.type =
-            LiteralType::NUMBER;
-
-        literal.value =
-            token.value;
-
+        literal.type = LiteralType::NUMBER;
+        literal.value = consume().value;
         return literal;
     }
 
     if (check(TokenType::STRING))
     {
-        Token token = consume();
-
         Literal literal;
-
-        literal.type =
-            LiteralType::STRING;
-
-        literal.value =
-            token.value;
-
+        literal.type = LiteralType::STRING;
+        literal.value = consume().value;
         return literal;
     }
 
-    throw std::runtime_error(
-        "Expected literal"
-    );
+    throw std::runtime_error("Expected literal");
 }
 
 Condition Parser::parseCondition()
 {
     Condition condition;
 
-    condition.column =
-        parseIdentifier();
+    condition.column = parseIdentifier();
 
     if (match(TokenType::EQUAL))
-    {
-        condition.op =
-            ComparisonOperator::EQUAL;
-    }
+        condition.op = ComparisonOperator::EQUAL;
     else if (match(TokenType::NOT_EQUAL))
-    {
-        condition.op =
-            ComparisonOperator::NOT_EQUAL;
-    }
+        condition.op = ComparisonOperator::NOT_EQUAL;
     else if (match(TokenType::GREATER))
-    {
-        condition.op =
-            ComparisonOperator::GREATER;
-    }
+        condition.op = ComparisonOperator::GREATER;
     else if (match(TokenType::LESS))
-    {
-        condition.op =
-            ComparisonOperator::LESS;
-    }
+        condition.op = ComparisonOperator::LESS;
     else if (match(TokenType::GREATER_EQUAL))
-    {
-        condition.op =
-            ComparisonOperator::GREATER_EQUAL;
-    }
+        condition.op = ComparisonOperator::GREATER_EQUAL;
     else if (match(TokenType::LESS_EQUAL))
-    {
-        condition.op =
-            ComparisonOperator::LESS_EQUAL;
-    }
+        condition.op = ComparisonOperator::LESS_EQUAL;
     else
-    {
-        throw std::runtime_error(
-            "Expected comparison operator"
-        );
-    }
+        throw std::runtime_error("Expected comparison operator");
 
-    condition.value =
-        parseLiteral();
+    condition.value = parseLiteral();
 
     return condition;
 }
 
-std::vector<std::string>
-Parser::parseColumnList()
+std::vector<std::string> Parser::parseColumnList()
 {
     std::vector<std::string> columns;
 
-    columns.push_back(
-        parseIdentifier()
-    );
+    columns.push_back(parseIdentifier());
 
     while (match(TokenType::COMMA))
-    {
-        columns.push_back(
-            parseIdentifier()
-        );
-    }
+        columns.push_back(parseIdentifier());
 
     return columns;
 }
+
+// --------------------------------------------------
+// SELECT
+// --------------------------------------------------
 
 SelectQuery Parser::parseSelect()
 {
@@ -190,61 +131,233 @@ SelectQuery Parser::parseSelect()
     expect(TokenType::SELECT);
 
     if (match(TokenType::STAR))
-    {
         query.columns.push_back("*");
-    }
     else
-    {
-        query.columns =
-            parseColumnList();
-    }
+        query.columns = parseColumnList();
 
     expect(TokenType::FROM);
 
-    query.tableName =
-        parseIdentifier();
+    query.tableName = parseIdentifier();
 
     query.hasCondition = false;
+    query.limit = -1;
 
     if (match(TokenType::WHERE))
     {
         query.hasCondition = true;
-
-        query.condition =
-            parseCondition();
+        query.condition = parseCondition();
     }
-
-    query.limit = -1;
 
     if (match(TokenType::LIMIT))
     {
-        Literal limit =
-            parseLiteral();
+        Literal limit = parseLiteral();
 
-        if (limit.type !=
-            LiteralType::NUMBER)
+        if (limit.type != LiteralType::NUMBER)
+            throw std::runtime_error("LIMIT requires a number");
+
+        try
         {
-            throw std::runtime_error(
-                "LIMIT requires a number"
-            );
-        }
+            std::size_t position = 0;
+            int value = std::stoi(limit.value, &position);
 
-        query.limit =
-            std::stoi(limit.value);
+            if (position != limit.value.size() || value < 0)
+                throw std::runtime_error("Invalid LIMIT value");
+
+            query.limit = value;
+        }
+        catch (const std::exception&)
+        {
+            throw std::runtime_error("Invalid LIMIT value");
+        }
     }
 
     match(TokenType::SEMICOLON);
 
     if (!check(TokenType::END))
-    {
         throw std::runtime_error(
-            "Unexpected token: " +
-            currentToken().value
+            "Unexpected token: " + currentToken().value
         );
-    }
 
     return query;
 }
+
+// --------------------------------------------------
+// CREATE TABLE
+// --------------------------------------------------
+
+CreateTableQuery Parser::parseCreateTable()
+{
+    expect(TokenType::CREATE);
+    expect(TokenType::TABLE);
+
+    CreateTableQuery query;
+
+    query.tableName = parseIdentifier();
+
+    expect(TokenType::LEFT_PAREN);
+
+    while (true)
+    {
+        std::string columnName = parseIdentifier();
+        std::string columnType = parseIdentifier();
+
+        query.columns.push_back({
+            columnName,
+            columnType
+        });
+
+        if (!match(TokenType::COMMA))
+            break;
+    }
+
+    expect(TokenType::RIGHT_PAREN);
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+
+    return query;
+}
+
+// --------------------------------------------------
+// CREATE INDEX
+// --------------------------------------------------
+
+CreateIndexQuery Parser::parseCreateIndex()
+{
+    expect(TokenType::CREATE);
+    expect(TokenType::INDEX);
+
+    CreateIndexQuery query;
+
+    query.indexName = parseIdentifier();
+
+    expect(TokenType::ON);
+
+    query.tableName = parseIdentifier();
+
+    expect(TokenType::LEFT_PAREN);
+
+    query.columnName = parseIdentifier();
+
+    expect(TokenType::RIGHT_PAREN);
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+
+    return query;
+}
+
+// --------------------------------------------------
+// INSERT
+// --------------------------------------------------
+
+InsertQuery Parser::parseInsert()
+{
+    expect(TokenType::INSERT);
+    expect(TokenType::INTO);
+
+    InsertQuery query;
+
+    query.tableName = parseIdentifier();
+
+    expect(TokenType::VALUES);
+    expect(TokenType::LEFT_PAREN);
+
+    query.values.push_back(parseLiteral());
+
+    while (match(TokenType::COMMA))
+        query.values.push_back(parseLiteral());
+
+    expect(TokenType::RIGHT_PAREN);
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+
+    return query;
+}
+
+// --------------------------------------------------
+// UPDATE
+// --------------------------------------------------
+
+UpdateQuery Parser::parseUpdate()
+{
+    expect(TokenType::UPDATE);
+
+    UpdateQuery query;
+
+    query.tableName = parseIdentifier();
+
+    expect(TokenType::SET);
+
+    query.column = parseIdentifier();
+
+    expect(TokenType::EQUAL);
+
+    query.value = parseLiteral();
+    query.hasCondition = false;
+
+    if (match(TokenType::WHERE))
+    {
+        query.hasCondition = true;
+        query.condition = parseCondition();
+    }
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+
+    return query;
+}
+
+// --------------------------------------------------
+// DELETE
+// --------------------------------------------------
+
+DeleteQuery Parser::parseDelete()
+{
+    expect(TokenType::DELETE);
+    expect(TokenType::FROM);
+
+    DeleteQuery query;
+
+    query.tableName = parseIdentifier();
+    query.hasCondition = false;
+
+    if (match(TokenType::WHERE))
+    {
+        query.hasCondition = true;
+        query.condition = parseCondition();
+    }
+
+    match(TokenType::SEMICOLON);
+
+    if (!check(TokenType::END))
+        throw std::runtime_error(
+            "Unexpected token: " + currentToken().value
+        );
+
+    return query;
+}
+
+// --------------------------------------------------
+// Main parser entry point
+// --------------------------------------------------
 
 Query Parser::parse()
 {
@@ -254,34 +367,31 @@ Query Parser::parse()
     {
         query.type = QueryType::SELECT;
         query.select = parseSelect();
-<<<<<<< HEAD
-=======
-
         return query;
     }
 
     if (check(TokenType::CREATE))
     {
-        query.type = QueryType::CREATE_TABLE;
-        query.createTable = parseCreateTable();
+        if (position + 1 >= tokens.size())
+            throw std::runtime_error("Incomplete CREATE statement");
 
-        return query;
-    }
+        if (tokens[position + 1].type == TokenType::TABLE)
+        {
+            query.type = QueryType::CREATE_TABLE;
+            query.createTable = parseCreateTable();
+            return query;
+        }
 
-    if (check(TokenType::INSERT))
-    {
-        query.type = QueryType::INSERT;
-        query.insert = parseInsert();
+        if (tokens[position + 1].type == TokenType::INDEX)
+        {
+            query.type = QueryType::CREATE_INDEX;
+            query.createIndex = parseCreateIndex();
+            return query;
+        }
 
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22
-        return query;
-    }
-
-    if (check(TokenType::CREATE))
-    {
-        query.type = QueryType::CREATE_TABLE;
-        query.createTable = parseCreateTable();
-        return query;
+        throw std::runtime_error(
+            "Expected TABLE or INDEX after CREATE"
+        );
     }
 
     if (check(TokenType::INSERT))
@@ -304,174 +414,6 @@ Query Parser::parse()
         query.remove = parseDelete();
         return query;
     }
-    
-    throw std::runtime_error(
-        "Unsupported query"
-    );
+
+    throw std::runtime_error("Unsupported query");
 }
-
-CreateTableQuery Parser::parseCreateTable()
-{
-    expect(TokenType::CREATE);
-
-    expect(TokenType::TABLE);
-
-    std::string tableName =
-        parseIdentifier();
-
-    expect(TokenType::LEFT_PAREN);
-
-    std::vector<ColumnDefinition> columns;
-
-    while (true)
-    {
-        std::string columnName =
-            parseIdentifier();
-
-        std::string columnType =
-            parseIdentifier();
-
-        columns.push_back({
-            columnName,
-            columnType
-        });
-
-        if (match(TokenType::COMMA))
-        {
-            continue;
-        }
-
-        break;
-    }
-
-    expect(TokenType::RIGHT_PAREN);
-
-    match(TokenType::SEMICOLON);
-
-    if (!check(TokenType::END))
-    {
-        throw std::runtime_error(
-            "Unexpected token: " +
-            currentToken().value
-        );
-    }
-
-    CreateTableQuery query;
-
-    query.tableName = tableName;
-    query.columns = columns;
-
-    return query;
-}
-
-InsertQuery Parser::parseInsert()
-{
-    expect(TokenType::INSERT);
-
-    expect(TokenType::INTO);
-
-    std::string tableName =
-        parseIdentifier();
-
-    expect(TokenType::VALUES);
-
-    expect(TokenType::LEFT_PAREN);
-
-    std::vector<Literal> values;
-
-    values.push_back(
-        parseLiteral()
-    );
-
-    while (match(TokenType::COMMA))
-    {
-        values.push_back(
-            parseLiteral()
-        );
-    }
-
-    expect(TokenType::RIGHT_PAREN);
-
-    match(TokenType::SEMICOLON);
-
-    if (!check(TokenType::END))
-    {
-        throw std::runtime_error(
-            "Unexpected token: " +
-            currentToken().value
-        );
-    }
-
-    InsertQuery query;
-
-    query.tableName = tableName;
-    query.values = values;
-
-    return query;
-<<<<<<< HEAD
-}
-
-
-UpdateQuery Parser::parseUpdate()
-{
-    expect(TokenType::UPDATE);
-
-    UpdateQuery query;
-    query.tableName = parseIdentifier();
-
-    expect(TokenType::SET);
-
-    query.column = parseIdentifier();
-
-    expect(TokenType::EQUAL);
-
-    query.value = parseLiteral();
-    query.hasCondition = false;
-
-    if (match(TokenType::WHERE))
-    {
-        query.hasCondition = true;
-        query.condition = parseCondition();
-    }
-
-    match(TokenType::SEMICOLON);
-
-    if (!check(TokenType::END))
-    {
-        throw std::runtime_error(
-            "Unexpected token: " + currentToken().value
-        );
-    }
-
-    return query;
-}
-
-DeleteQuery Parser::parseDelete()
-{
-    expect(TokenType::DELETE);
-    expect(TokenType::FROM);
-
-    DeleteQuery query;
-    query.tableName = parseIdentifier();
-    query.hasCondition = false;
-
-    if (match(TokenType::WHERE))
-    {
-        query.hasCondition = true;
-        query.condition = parseCondition();
-    }
-
-    match(TokenType::SEMICOLON);
-
-    if (!check(TokenType::END))
-    {
-        throw std::runtime_error(
-            "Unexpected token: " + currentToken().value
-        );
-    }
-
-    return query;
-}
-=======
-}
->>>>>>> 4b0779494586eeddfd737f5f686076f8c696dc22

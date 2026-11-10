@@ -22,6 +22,8 @@ enum class TokenType
     DELETE,
     CREATE,
     TABLE,
+    INDEX,
+    ON,
     LIMIT,
 
     // Data

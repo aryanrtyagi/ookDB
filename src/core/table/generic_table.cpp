@@ -416,3 +416,44 @@ const Schema& GenericTable::getSchema() const
 {
     return schema;
 }
+
+// ============================================================
+// Enumerate all active records using stable RecordIds
+// ============================================================
+
+std::vector<RecordId> GenericTable::getAllRecordIds()
+{
+    std::vector<RecordId> result;
+
+    int pageNumber = firstPage;
+
+    while (pageNumber != -1)
+    {
+        char* pageData = bufferPool.getPage(pageNumber);
+
+        if (pageData == nullptr)
+        {
+            throw std::runtime_error(
+                "Could not load page while enumerating records"
+            );
+        }
+
+        RecordPage page(pageData);
+
+        std::vector<std::pair<uint32_t, uint32_t>> slots =
+            page.getLiveSlots();
+
+        for (const auto& slot : slots)
+        {
+            result.emplace_back(
+                pageNumber,
+                slot.first,
+                slot.second
+            );
+        }
+
+        pageNumber = page.getNextPage();
+    }
+
+    return result;
+}
