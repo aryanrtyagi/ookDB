@@ -462,6 +462,12 @@ std::string tokenTypeToString(
     case TokenType::TABLE:
         return "TABLE";
 
+    case TokenType::INDEX:
+        return "INDEX";
+
+    case TokenType::ON:
+        return "ON";
+
     case TokenType::LIMIT:
         return "LIMIT";
 

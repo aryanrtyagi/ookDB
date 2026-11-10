@@ -6,6 +6,11 @@
 #include <algorithm>
 #include <cctype>
 #include <vector>
+#include <memory>
+#include <cstdio>
+#include <cstdint>
+#include <limits>
+#include <sstream>
 
 // --------------------------------------------------
 // Convert SQL datatype text into DataType
@@ -59,6 +64,22 @@ Executor::Executor(
       catalog(catalog),
       catalogStorage(catalogStorage)
 {
+    loadIndexManagers();
+}
+
+// --------------------------------------------------
+// Load persistent index managers from catalog metadata
+// --------------------------------------------------
+
+void Executor::loadIndexManagers()
+{
+    indexManagers.clear();
+
+    for (const IndexMetadata& metadata : catalog.getIndexes())
+    {
+        indexManagers[metadata.indexName] =
+            std::make_unique<IndexManager>(metadata.filePath);
+    }
 }
 
 // --------------------------------------------------
@@ -356,100 +377,122 @@ void Executor::executeSelect(const SelectQuery& query)
 
     std::vector<int> selectedColumns;
 
-    // SELECT *
     if (query.columns.size() == 1 && query.columns[0] == "*")
     {
         for (int i = 0; i < schema.size(); ++i)
-        {
             selectedColumns.push_back(i);
-        }
     }
     else
     {
         for (const std::string& columnName : query.columns)
         {
             int index = schema.getColumnIndex(columnName);
-
             if (index < 0)
-            {
-                throw std::runtime_error(
-                    "Column does not exist: " + columnName
-                );
-            }
-
+                throw std::runtime_error("Column does not exist: " + columnName);
             selectedColumns.push_back(index);
         }
     }
 
-    // Print column headers
-    for (std::size_t i = 0; i < selectedColumns.size(); ++i)
+    auto printHeader = [&]()
     {
-        if (i > 0)
-            std::cout << " | ";
+        for (std::size_t i = 0; i < selectedColumns.size(); ++i)
+        {
+            if (i) std::cout << " | ";
+            std::cout << schema.getColumn(selectedColumns[i]).getName();
+        }
+        std::cout << '\n';
+        for (std::size_t i = 0; i < selectedColumns.size(); ++i)
+        {
+            if (i) std::cout << "-+-";
+            std::cout << "--------";
+        }
+        std::cout << '\n';
+    };
 
-        std::cout << schema.getColumn(selectedColumns[i]).getName();
+    auto printRow = [&](const Row& row)
+    {
+        for (std::size_t j = 0; j < selectedColumns.size(); ++j)
+        {
+            if (j) std::cout << " | ";
+            const Value& value = row.getValue(selectedColumns[j]);
+            switch (value.getType())
+            {
+                case DataType::INT: std::cout << value.asInt(); break;
+                case DataType::DOUBLE: std::cout << value.asDouble(); break;
+                case DataType::BOOLEAN: std::cout << (value.asBool() ? "TRUE" : "FALSE"); break;
+                case DataType::VARCHAR: std::cout << value.asString(); break;
+            }
+        }
+        std::cout << '\n';
+    };
+
+    printHeader();
+
+    std::vector<RecordId> candidateIds;
+    bool usedIndex = false;
+
+    // Only equality predicates on indexed INT columns use the B+ Tree.
+    if (query.hasCondition && query.condition.op == ComparisonOperator::EQUAL)
+    {
+        int columnIndex = schema.getColumnIndex(query.condition.column);
+        if (columnIndex < 0)
+            throw std::runtime_error("Column does not exist: " + query.condition.column);
+
+        const Column& column = schema.getColumn(columnIndex);
+        const IndexMetadata* metadata =
+            catalog.findIndex(query.tableName, query.condition.column);
+
+        if (metadata != nullptr && column.getType() == DataType::INT)
+        {
+            Value keyValue = convertLiteral(query.condition.value, DataType::INT);
+            auto managerIt = indexManagers.find(metadata->indexName);
+            if (managerIt == indexManagers.end())
+                throw std::runtime_error("Index manager is not loaded: " + metadata->indexName);
+
+            candidateIds = managerIt->second->search(keyValue.asInt());
+            usedIndex = true;
+        }
     }
 
-    std::cout << '\n';
-
-    for (std::size_t i = 0; i < selectedColumns.size(); ++i)
-    {
-        if (i > 0)
-            std::cout << "-+-";
-
-        std::cout << "--------";
-    }
-
-    std::cout << '\n';
-
-    int totalRows = table.size();
     int printedRows = 0;
+    auto emitIfMatches = [&](const Row& row)
+    {
+        if (query.hasCondition && !evaluateCondition(row, schema, query.condition))
+            return;
+        if (query.limit >= 0 && printedRows >= query.limit)
+            return;
+        printRow(row);
+        ++printedRows;
+    };
 
-    for (int i = 0; i < totalRows; ++i)
+    if (usedIndex)
+    {
+        for (const RecordId& rid : candidateIds)
+        {
+            if (query.limit >= 0 && printedRows >= query.limit)
+                break;
+            try
+            {
+                emitIfMatches(table.get(rid));
+            }
+            catch (const std::exception&)
+            {
+                // Ignore stale/corrupt index references rather than returning a wrong row.
+            }
+        }
+        std::cout << printedRows << " row(s) selected. [B+ Tree index]\n";
+        return;
+    }
+
+    std::vector<RecordId> ids = table.getAllRecordIds();
+    for (const RecordId& rid : ids)
     {
         if (query.limit >= 0 && printedRows >= query.limit)
             break;
-
-        Row row = table.get(i);
-
-        if (query.hasCondition &&
-            !evaluateCondition(row, schema, query.condition))
-        {
-            continue;
-        }
-
-        for (std::size_t j = 0; j < selectedColumns.size(); ++j)
-        {
-            if (j > 0)
-                std::cout << " | ";
-
-            const Value& value = row.getValue(selectedColumns[j]);
-
-            switch (value.getType())
-            {
-                case DataType::INT:
-                    std::cout << value.asInt();
-                    break;
-
-                case DataType::DOUBLE:
-                    std::cout << value.asDouble();
-                    break;
-
-                case DataType::BOOLEAN:
-                    std::cout << (value.asBool() ? "TRUE" : "FALSE");
-                    break;
-
-                case DataType::VARCHAR:
-                    std::cout << value.asString();
-                    break;
-            }
-        }
-
-        std::cout << '\n';
-        ++printedRows;
+        emitIfMatches(table.get(rid));
     }
 
-    std::cout << printedRows << " row(s) selected.\n";
+    std::cout << printedRows << " row(s) selected. [Full table scan]\n";
 }
 
 // --------------------------------------------------
@@ -459,40 +502,46 @@ void Executor::executeSelect(const SelectQuery& query)
 void Executor::executeInsert(const InsertQuery& query)
 {
     if (!catalog.tableExists(query.tableName))
-    {
-        throw std::runtime_error(
-            "Table does not exist: " + query.tableName
-        );
-    }
+        throw std::runtime_error("Table does not exist: " + query.tableName);
 
     Schema schema = catalog.getSchema(query.tableName);
-
     if (query.values.size() != static_cast<std::size_t>(schema.size()))
-    {
-        throw std::runtime_error(
-            "Column count does not match value count"
-        );
-    }
+        throw std::runtime_error("Column count does not match value count");
 
     Row row;
-
     for (int i = 0; i < schema.size(); ++i)
-    {
-        DataType expectedType = schema.getColumn(i).getType();
-
-        Value value = convertLiteral(
-            query.values[i],
-            expectedType
-        );
-
-        row.addValue(value);
-    }
+        row.addValue(convertLiteral(query.values[i], schema.getColumn(i).getType()));
 
     GenericTable table = openTable(query.tableName);
-
-    if (!table.insert(row))
-    {
+    RecordId rid = table.insertWithId(row);
+    if (!rid.isValid())
         throw std::runtime_error("Failed to insert row");
+
+    std::vector<std::pair<IndexManager*, int64_t>> inserted;
+    try
+    {
+        for (const IndexMetadata& metadata : catalog.getIndexes())
+        {
+            if (metadata.tableName != query.tableName)
+                continue;
+            int column = schema.getColumnIndex(metadata.columnName);
+            if (column < 0 || schema.getColumn(column).getType() != DataType::INT)
+                throw std::runtime_error("Invalid indexed column metadata");
+            auto it = indexManagers.find(metadata.indexName);
+            if (it == indexManagers.end())
+                throw std::runtime_error("Index manager is not loaded: " + metadata.indexName);
+            int64_t key = row.getValue(column).asInt();
+            if (!it->second->insert(key, rid))
+                throw std::runtime_error("Failed to update index: " + metadata.indexName);
+            inserted.emplace_back(it->second.get(), key);
+        }
+    }
+    catch (...)
+    {
+        for (auto& entry : inserted)
+            entry.first->erase(entry.second, rid);
+        table.deleteRow(rid);
+        throw;
     }
 
     std::cout << "1 row inserted.\n";
@@ -508,47 +557,66 @@ void Executor::executeUpdate(const UpdateQuery& query)
     const Schema& schema = table.getSchema();
 
     int columnIndex = schema.getColumnIndex(query.column);
-
     if (columnIndex < 0)
-    {
-        throw std::runtime_error(
-            "Column does not exist: " + query.column
-        );
-    }
+        throw std::runtime_error("Column does not exist: " + query.column);
 
-    Value newValue = convertLiteral(
-        query.value,
-        schema.getColumn(columnIndex).getType()
-    );
-
+    Value newValue = convertLiteral(query.value, schema.getColumn(columnIndex).getType());
+    std::vector<RecordId> ids = table.getAllRecordIds();
     int updatedCount = 0;
-    int totalRows = table.size();
 
-    for (int i = 0; i < totalRows; ++i)
+    for (const RecordId& rid : ids)
     {
-        Row currentRow = table.get(i);
-
-        if (query.hasCondition &&
-            !evaluateCondition(currentRow, schema, query.condition))
-        {
+        Row oldRow = table.get(rid);
+        if (query.hasCondition && !evaluateCondition(oldRow, schema, query.condition))
             continue;
-        }
 
-        Row updatedRow;
+        Row newRow;
+        for (int c = 0; c < schema.size(); ++c)
+            newRow.addValue(c == columnIndex ? newValue : oldRow.getValue(c));
 
-        for (int column = 0; column < schema.size(); ++column)
+        if (!table.updateRow(rid, newRow))
+            throw std::runtime_error("Could not update record");
+
+        struct ChangedIndex { IndexManager* manager; int64_t oldKey; int64_t newKey; bool erased; bool inserted; };
+        std::vector<ChangedIndex> changed;
+        try
         {
-            if (column == columnIndex)
-                updatedRow.addValue(newValue);
-            else
-                updatedRow.addValue(currentRow.getValue(column));
-        }
+            for (const IndexMetadata& metadata : catalog.getIndexes())
+            {
+                if (metadata.tableName != query.tableName)
+                    continue;
+                int indexedColumn = schema.getColumnIndex(metadata.columnName);
+                if (indexedColumn < 0 || schema.getColumn(indexedColumn).getType() != DataType::INT)
+                    throw std::runtime_error("Invalid indexed column metadata");
+                auto it = indexManagers.find(metadata.indexName);
+                if (it == indexManagers.end())
+                    throw std::runtime_error("Index manager is not loaded: " + metadata.indexName);
 
-        if (!table.updateRow(i, updatedRow))
+                int64_t oldKey = oldRow.getValue(indexedColumn).asInt();
+                int64_t newKey = newRow.getValue(indexedColumn).asInt();
+                if (oldKey == newKey)
+                    continue;
+
+                ChangedIndex state{it->second.get(), oldKey, newKey, false, false};
+                if (!state.manager->erase(oldKey, rid))
+                    throw std::runtime_error("Could not remove old index entry: " + metadata.indexName);
+                state.erased = true;
+                changed.push_back(state);
+
+                if (!state.manager->insert(newKey, rid))
+                    throw std::runtime_error("Could not insert new index entry: " + metadata.indexName);
+                changed.back().inserted = true;
+            }
+        }
+        catch (...)
         {
-            throw std::runtime_error(
-                "Could not update row " + std::to_string(i)
-            );
+            for (auto it = changed.rbegin(); it != changed.rend(); ++it)
+            {
+                if (it->inserted) it->manager->erase(it->newKey, rid);
+                if (it->erased) it->manager->insert(it->oldKey, rid);
+            }
+            table.updateRow(rid, oldRow);
+            throw;
         }
 
         ++updatedCount;
@@ -564,32 +632,110 @@ void Executor::executeUpdate(const UpdateQuery& query)
 void Executor::executeDelete(const DeleteQuery& query)
 {
     GenericTable table = openTable(query.tableName);
-
+    const Schema& schema = table.getSchema();
+    std::vector<RecordId> ids = table.getAllRecordIds();
     int deletedCount = 0;
-    int index = 0;
 
-    while (index < table.size())
+    for (const RecordId& rid : ids)
     {
-        Row row = table.get(index);
-
-        if (query.hasCondition &&
-            !evaluateCondition(row, table.getSchema(), query.condition))
-        {
-            ++index;
+        Row row = table.get(rid);
+        if (query.hasCondition && !evaluateCondition(row, schema, query.condition))
             continue;
-        }
 
-        if (!table.deleteRow(index))
+        struct RemovedIndex { IndexManager* manager; int64_t key; };
+        std::vector<RemovedIndex> removed;
+        try
         {
-            throw std::runtime_error(
-                "Could not delete row " + std::to_string(index)
-            );
-        }
+            for (const IndexMetadata& metadata : catalog.getIndexes())
+            {
+                if (metadata.tableName != query.tableName)
+                    continue;
+                int column = schema.getColumnIndex(metadata.columnName);
+                if (column < 0 || schema.getColumn(column).getType() != DataType::INT)
+                    throw std::runtime_error("Invalid indexed column metadata");
+                auto it = indexManagers.find(metadata.indexName);
+                if (it == indexManagers.end())
+                    throw std::runtime_error("Index manager is not loaded: " + metadata.indexName);
+                int64_t key = row.getValue(column).asInt();
+                if (!it->second->erase(key, rid))
+                    throw std::runtime_error("Could not remove index entry: " + metadata.indexName);
+                removed.push_back({it->second.get(), key});
+            }
 
+            if (!table.deleteRow(rid))
+                throw std::runtime_error("Could not delete record");
+        }
+        catch (...)
+        {
+            for (const RemovedIndex& entry : removed)
+                entry.manager->insert(entry.key, rid);
+            throw;
+        }
         ++deletedCount;
     }
 
     std::cout << deletedCount << " row(s) deleted.\n";
+}
+
+// --------------------------------------------------
+// Execute CREATE INDEX
+// --------------------------------------------------
+
+void Executor::executeCreateIndex(const CreateIndexQuery& query)
+{
+    if (!catalog.tableExists(query.tableName))
+        throw std::runtime_error("Table does not exist: " + query.tableName);
+    if (catalog.indexExists(query.indexName))
+        throw std::runtime_error("Index already exists: " + query.indexName);
+    if (catalog.hasIndex(query.tableName, query.columnName))
+        throw std::runtime_error("An index already exists on this column");
+
+    const Schema& schema = catalog.getSchema(query.tableName);
+    int column = schema.getColumnIndex(query.columnName);
+    if (column < 0)
+        throw std::runtime_error("Column does not exist: " + query.columnName);
+    if (schema.getColumn(column).getType() != DataType::INT)
+        throw std::runtime_error("Only INT columns can be indexed currently");
+
+    const std::string path = "data/" + query.indexName + ".idx";
+    std::remove(path.c_str()); // Avoid loading an orphaned index file with the same name.
+
+    std::unique_ptr<IndexManager> manager =
+        std::make_unique<IndexManager>(path);
+
+    GenericTable table = openTable(query.tableName);
+    std::vector<RecordId> ids = table.getAllRecordIds();
+
+    for (const RecordId& rid : ids)
+    {
+        Row row = table.get(rid);
+        int64_t key = row.getValue(column).asInt();
+        if (!manager->insert(key, rid))
+            throw std::runtime_error("Failed while building index file");
+    }
+
+    if (!catalog.createIndex(query.indexName, query.tableName,
+                             query.columnName, path))
+    {
+        std::remove(path.c_str());
+        throw std::runtime_error("Could not register index in catalog");
+    }
+
+    try
+    {
+        catalogStorage.save(catalog);
+    }
+    catch (...)
+    {
+        // Do not keep an in-memory catalog definition if persistence failed.
+        // The current Catalog API has no removeIndex method; report the failure
+        // so the caller can restart from the last persisted catalog.
+        throw;
+    }
+
+    indexManagers[query.indexName] = std::move(manager);
+    std::cout << "Index '" << query.indexName << "' created on "
+              << query.tableName << "(" << query.columnName << ").\n";
 }
 
 // --------------------------------------------------
@@ -598,6 +744,12 @@ void Executor::executeDelete(const DeleteQuery& query)
 
 void Executor::execute(const Query& query)
 {
+    if (query.type == QueryType::CREATE_INDEX)
+    {
+        executeCreateIndex(query.createIndex);
+        return;
+    }
+
     if (query.type == QueryType::SELECT)
     {
         executeSelect(query.select);

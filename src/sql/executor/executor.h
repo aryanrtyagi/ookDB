@@ -1,8 +1,12 @@
-
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
 
 #include <string>
+#include <map>
+#include <memory>
+#include <cstdint>
+
+#include "../../index/index_manager.h"
 
 #include "../../core/pager/pager.h"
 #include "../../core/buffer/buffer_pool.h"
@@ -23,6 +27,9 @@ private:
     Catalog& catalog;
     CatalogStorage& catalogStorage;
 
+    // Index managers live as long as the Executor.
+    std::map<std::string, std::unique_ptr<IndexManager>> indexManagers;
+
     GenericTable openTable(const std::string& tableName);
 
     bool evaluateCondition(
@@ -36,6 +43,8 @@ private:
         DataType expectedType
     );
 
+    void executeCreateIndex(const CreateIndexQuery& query);
+    void loadIndexManagers();
     void executeSelect(const SelectQuery& query);
     void executeInsert(const InsertQuery& query);
     void executeUpdate(const UpdateQuery& query);
