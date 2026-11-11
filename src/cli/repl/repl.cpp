@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
+#include <vector>
 
 #include "../../sql/lexer/lexer.h"
 #include "../../sql/parser/parser.h"
@@ -34,21 +35,94 @@ void Repl::printPrompt()
 }
 
 // ============================================================
+// Display Query Result
+// ============================================================
+
+static void displayResult(const QueryResult& result)
+{
+    if (!result.columns.empty())
+    {
+        for (std::size_t i = 0; i < result.columns.size(); ++i)
+        {
+            if (i)
+                std::cout << " | ";
+
+            std::cout << result.columns[i];
+        }
+
+        std::cout << '\n';
+
+        for (std::size_t i = 0; i < result.columns.size(); ++i)
+        {
+            if (i)
+                std::cout << "-+-";
+
+            std::cout << "--------";
+        }
+
+        std::cout << '\n';
+
+        for (const auto& row : result.rows)
+        {
+            for (std::size_t i = 0; i < row.size(); ++i)
+            {
+                if (i)
+                    std::cout << " | ";
+
+                const Value& value = row[i];
+
+                switch (value.getType())
+                {
+                    case DataType::INT:
+                        std::cout << value.asInt();
+                        break;
+
+                    case DataType::DOUBLE:
+                        std::cout << value.asDouble();
+                        break;
+
+                    case DataType::BOOLEAN:
+                        std::cout << (value.asBool() ? "TRUE" : "FALSE");
+                        break;
+
+                    case DataType::VARCHAR:
+                        std::cout << value.asString();
+                        break;
+                }
+            }
+
+            std::cout << '\n';
+        }
+
+        std::cout << result.affectedRows
+                  << " row(s) selected. ["
+                  << result.message << "]\n";
+
+        return;
+    }
+
+    std::cout << result.message << '\n';
+}
+
+// ============================================================
 // Process SQL Command
 // ============================================================
 
 void Repl::processCommand(const std::string& command)
 {
-    // Ignore leading and trailing whitespace when checking exit.
     std::string trimmed = command;
 
     auto first = std::find_if_not(
-        trimmed.begin(), trimmed.end(),
-        [](unsigned char c) { return std::isspace(c); });
+        trimmed.begin(),
+        trimmed.end(),
+        [](unsigned char c) { return std::isspace(c); }
+    );
 
     auto last = std::find_if_not(
-        trimmed.rbegin(), trimmed.rend(),
-        [](unsigned char c) { return std::isspace(c); }).base();
+        trimmed.rbegin(),
+        trimmed.rend(),
+        [](unsigned char c) { return std::isspace(c); }
+    ).base();
 
     if (first >= last)
         return;
@@ -64,16 +138,15 @@ void Repl::processCommand(const std::string& command)
 
     try
     {
-        // 1. Convert SQL text into tokens.
         Lexer lexer(trimmed);
         std::vector<Token> tokens = lexer.tokenize();
 
-        // 2. Parse tokens into an AST Query.
         Parser parser(tokens);
         Query query = parser.parse();
 
-        // 3. Execute the parsed query.
-        executor.execute(query);
+        QueryResult result = executor.execute(query);
+
+        displayResult(result);
     }
     catch (const std::exception& e)
     {

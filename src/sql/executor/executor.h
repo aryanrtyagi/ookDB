@@ -1,3 +1,4 @@
+
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
 
@@ -17,6 +18,7 @@
 
 #include "../../record/row.h"
 #include "../ast/query.h"
+#include "query_result.h"
 
 class Executor
 {
@@ -27,7 +29,6 @@ private:
     Catalog& catalog;
     CatalogStorage& catalogStorage;
 
-    // Index managers live as long as the Executor.
     std::map<std::string, std::unique_ptr<IndexManager>> indexManagers;
 
     GenericTable openTable(const std::string& tableName);
@@ -43,12 +44,13 @@ private:
         DataType expectedType
     );
 
-    void executeCreateIndex(const CreateIndexQuery& query);
+    QueryResult executeCreateIndex(const CreateIndexQuery& query);
     void loadIndexManagers();
-    void executeSelect(const SelectQuery& query);
-    void executeInsert(const InsertQuery& query);
-    void executeUpdate(const UpdateQuery& query);
-    void executeDelete(const DeleteQuery& query);
+
+    QueryResult executeSelect(const SelectQuery& query);
+    QueryResult executeInsert(const InsertQuery& query);
+    QueryResult executeUpdate(const UpdateQuery& query);
+    QueryResult executeDelete(const DeleteQuery& query);
 
 public:
     Executor(
@@ -59,7 +61,7 @@ public:
         CatalogStorage& catalogStorage
     );
 
-    void execute(const Query& query);
+    QueryResult execute(const Query& query);
 };
 
 #endif

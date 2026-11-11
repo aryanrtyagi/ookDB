@@ -1,8 +1,8 @@
 #ifndef TABLE_H
 #define TABLE_H
 
-#include "pager.h"
-#include "buffer_pool.h"
+#include "../core/pager/pager.h"
+#include "../core/buffer/buffer_pool.h"
 
 #include <string>
 
