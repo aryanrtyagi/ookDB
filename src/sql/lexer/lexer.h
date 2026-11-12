@@ -1,60 +1,40 @@
+
 #ifndef LEXER_H
 #define LEXER_H
 
 #include <string>
 #include <vector>
-
-// ============================================================
-// Token Types
-// ============================================================
+#include <cstddef>
 
 enum class TokenType
 {
-    // Keywords
-    SELECT,
-    FROM,
-    WHERE,
-    INSERT,
-    INTO,
-    VALUES,
-    UPDATE,
-    SET,
-    DELETE,
-    CREATE,
-    TABLE,
-    INDEX,
-    ON,
+    SELECT, FROM, WHERE,
+    INSERT, INTO, VALUES,
+    UPDATE, SET, DELETE,
+    CREATE, TABLE, INDEX, ON,
     LIMIT,
 
-    // Data
-    IDENTIFIER,
-    NUMBER,
-    STRING,
+    DISTINCT, ORDER, BY, ASC, DESC,
+    GROUP, HAVING,
+    INNER, LEFT, JOIN,
+    AS,
+    COUNT, SUM, AVG, MIN, MAX,
 
-    // Operators
-    EQUAL,
-    GREATER,
-    LESS,
-    GREATER_EQUAL,
-    LESS_EQUAL,
-    NOT_EQUAL,
+    SHOW, TABLES, DESCRIBE, DROP, ALTER,
+    ADD, COLUMN, RENAME, TO,
 
-    // Symbols
-    STAR,
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    COMMA,
-    SEMICOLON,
+    AND, OR, NOT, IN, BETWEEN, LIKE,
 
-    // Special
-    END,
-    INVALID
+    IDENTIFIER, NUMBER, STRING,
+
+    EQUAL, GREATER, LESS,
+    GREATER_EQUAL, LESS_EQUAL, NOT_EQUAL,
+
+    STAR, LEFT_PAREN, RIGHT_PAREN,
+    COMMA, SEMICOLON, DOT,
+
+    END, INVALID
 };
-
-
-// ============================================================
-// Token
-// ============================================================
 
 struct Token
 {
@@ -62,47 +42,26 @@ struct Token
     std::string value;
 };
 
-
-// ============================================================
-// Lexer
-// ============================================================
-
 class Lexer
 {
 private:
     std::string input;
-    size_t position;
+    std::size_t position;
 
     char currentChar() const;
-
     void skipWhitespace();
-
     Token readIdentifierOrKeyword();
-
     Token readNumber();
-
     Token readString();
-
     Token readOperatorOrSymbol();
 
 public:
-
-    explicit Lexer(
-        const std::string& input
-    );
+    explicit Lexer(const std::string& input);
 
     Token nextToken();
-
     std::vector<Token> tokenize();
 };
 
-
-// ============================================================
-// Helper
-// ============================================================
-
-std::string tokenTypeToString(
-    TokenType type
-);
+std::string tokenTypeToString(TokenType type);
 
 #endif

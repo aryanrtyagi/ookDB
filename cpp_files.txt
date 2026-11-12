@@ -22,3 +22,4 @@
 "C:\Users\aryan\Desktop\AryDB\src\sql\parser\parser.cpp" 
 "C:\Users\aryan\Desktop\AryDB\src\storage\record_page.cpp" 
 "C:\Users\aryan\Desktop\AryDB\src\table\table.cpp" 
+"C:\Users\aryan\Desktop\AryDB\src\database\database_manager.cpp"

@@ -2,11 +2,12 @@
 #include <pybind11/stl.h>
 
 #include "../../src/database/database.h"
+#include "../../src/database/database_manager.h"
 #include "../../src/record/value.h"
 
 namespace py = pybind11;
 
-// Convert AryDB's custom Value into a native Python object.
+// Convert AryDB Value into Python objects.
 py::object valueToPython(const Value& value)
 {
     switch (value.getType())
@@ -27,7 +28,7 @@ py::object valueToPython(const Value& value)
     return py::none();
 }
 
-// Convert QueryResult into a Python-friendly object.
+// Convert QueryResult into a Python dictionary.
 py::dict queryResultToPython(const QueryResult& result)
 {
     py::list rows;
@@ -59,15 +60,35 @@ PYBIND11_MODULE(arydb, m)
 {
     m.doc() = "Python bindings for AryDB Database Engine";
 
+    // Existing single-database binding.
     py::class_<Database>(m, "Database")
         .def(py::init<const std::string&>())
         .def(
             "execute",
             [](Database& db, const std::string& sql)
             {
-                QueryResult result = db.execute(sql);
-                return queryResultToPython(result);
+                return queryResultToPython(
+                    db.execute(sql)
+                );
             }
         )
         .def("close", &Database::close);
+
+    // Multi-database manager binding.
+    py::class_<DatabaseManager>(m, "DatabaseManager")
+        .def(py::init<const std::string&>())
+        .def(
+            "execute",
+            [](DatabaseManager& manager, const std::string& sql)
+            {
+                return queryResultToPython(
+                    manager.execute(sql)
+                );
+            }
+        )
+        .def(
+            "get_active_database_name",
+            &DatabaseManager::getActiveDatabaseName
+        )
+        .def("close", &DatabaseManager::close);
 }
