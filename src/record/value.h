@@ -8,7 +8,8 @@ enum class DataType
     INT,
     DOUBLE,
     BOOLEAN,
-    VARCHAR
+    VARCHAR,
+    NULL_VALUE
 };
 
 class Value
@@ -22,13 +23,21 @@ private:
     std::string stringValue;
 
 public:
+    // A default-constructed Value represents SQL NULL.
+    Value();
+
     Value(int value);
     Value(double value);
     Value(bool value);
     Value(const std::string& value);
     Value(const char* value);
 
+    // Explicit NULL factory.
+    static Value null();
+
     DataType getType() const;
+
+    bool isNull() const;
 
     int asInt() const;
     double asDouble() const;

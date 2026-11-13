@@ -9,8 +9,9 @@
 class Serializer
 {
 public:
-
-    static std::vector<uint8_t> serialize(const Row& row);
+    static std::vector<uint8_t> serialize(
+        const Row& row
+    );
 
     static Row deserialize(
         const std::vector<uint8_t>& data
