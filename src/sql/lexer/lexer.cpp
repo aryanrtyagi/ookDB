@@ -89,7 +89,9 @@ Token Lexer::readIdentifierOrKeyword()
         {"NOT", TokenType::NOT},
         {"IN", TokenType::IN},
         {"BETWEEN", TokenType::BETWEEN},
-        {"LIKE", TokenType::LIKE}
+        {"LIKE", TokenType::LIKE},
+        {"IS", TokenType::IS},
+        {"NULL", TokenType::NULL_VALUE}
     };
 
     auto it = keywords.find(upper);
@@ -262,6 +264,8 @@ std::string tokenTypeToString(TokenType type)
         case TokenType::IN: return "IN";
         case TokenType::BETWEEN: return "BETWEEN";
         case TokenType::LIKE: return "LIKE";
+        case TokenType::IS: return "IS";
+        case TokenType::NULL_VALUE: return "NULL";
         case TokenType::END: return "END";
         case TokenType::INVALID: return "INVALID";
         default: return "TOKEN";

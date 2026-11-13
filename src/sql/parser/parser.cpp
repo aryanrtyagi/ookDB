@@ -1,4 +1,3 @@
-
 #include "parser.h"
 
 #include <stdexcept>
@@ -75,6 +74,9 @@ Literal Parser::parseLiteral()
     if (check(TokenType::STRING))
         return {LiteralType::STRING, consume().value};
 
+    if (match(TokenType::NULL_VALUE))
+        return {LiteralType::NULL_VALUE, "NULL"};
+
     if (check(TokenType::IDENTIFIER))
     {
         std::string value = consume().value;
@@ -110,6 +112,15 @@ Condition Parser::parseComparisonCondition()
     condition.column = parseQualifiedIdentifier();
 
     bool negated = false;
+
+    if (match(TokenType::IS))
+    {
+        bool isNot = match(TokenType::NOT);
+        expect(TokenType::NULL_VALUE);
+        condition.op = isNot ? ComparisonOperator::IS_NOT_NULL
+                             : ComparisonOperator::IS_NULL;
+        return condition;
+    }
 
     if (check(TokenType::NOT) &&
         position + 1 < tokens.size() &&

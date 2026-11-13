@@ -1,21 +1,22 @@
-
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
 
-#include <string>
-#include <map>
 #include <memory>
-#include <cstdint>
+#include <string>
+#include <unordered_map>
 
-#include "../../index/index_manager.h"
+#include "../ast/query.h"
+#include "../../record/value.h"
+#include "../../record/row.h"
+#include "../../record/schema.h"
 #include "../../core/pager/pager.h"
 #include "../../core/buffer/buffer_pool.h"
 #include "../../core/allocation/page_allocator.h"
 #include "../../core/catalog/catalog.h"
-#include "../../core/table/generic_table.h"
 #include "../../core/catalog/catalog_storage.h"
-#include "../../record/row.h"
-#include "../ast/query.h"
+#include "../../core/table/generic_table.h"
+#include "../../index/index_manager.h"
+
 #include "query_result.h"
 
 class Executor
@@ -26,38 +27,25 @@ private:
     PageAllocator& pageAllocator;
     Catalog& catalog;
     CatalogStorage& catalogStorage;
+    std::unordered_map<std::string, std::unique_ptr<IndexManager>> indexManagers;
 
-    std::map<std::string, std::unique_ptr<IndexManager>> indexManagers;
-
+    void loadIndexManagers();
     GenericTable openTable(const std::string& tableName);
-
-    Value convertLiteral(
-        const Literal& literal,
-        DataType expectedType
-    );
-
-    bool evaluateCondition(
-        const Row& row,
-        const Schema& schema,
-        const Condition& condition
-    );
+    Value convertLiteral(const Literal& literal, DataType expectedType);
+    bool evaluateCondition(const Row& row, const Schema& schema, const Condition& condition);
 
     QueryResult executeCreateIndex(const CreateIndexQuery& query);
-    QueryResult executeSelect(const SelectQuery& query);
     QueryResult executeInsert(const InsertQuery& query);
+    QueryResult executeSelect(const SelectQuery& query);
     QueryResult executeUpdate(const UpdateQuery& query);
     QueryResult executeDelete(const DeleteQuery& query);
 
-    void loadIndexManagers();
-
 public:
-    Executor(
-        Pager& pager,
-        BufferPool& bufferPool,
-        PageAllocator& pageAllocator,
-        Catalog& catalog,
-        CatalogStorage& catalogStorage
-    );
+    Executor(Pager& pager,
+             BufferPool& bufferPool,
+             PageAllocator& pageAllocator,
+             Catalog& catalog,
+             CatalogStorage& catalogStorage);
 
     QueryResult execute(const Query& query);
 };

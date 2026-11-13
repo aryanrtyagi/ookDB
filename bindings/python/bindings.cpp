@@ -23,6 +23,9 @@ py::object valueToPython(const Value& value)
 
         case DataType::VARCHAR:
             return py::str(value.asString());
+
+        case DataType::NULL_VALUE:
+            return py::none();
     }
 
     return py::none();

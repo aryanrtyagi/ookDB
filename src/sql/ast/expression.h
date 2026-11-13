@@ -1,3 +1,4 @@
+
 #ifndef EXPRESSION_H
 #define EXPRESSION_H
 
@@ -17,12 +18,18 @@ enum class ComparisonOperator
     LESS,
     GREATER_EQUAL,
     LESS_EQUAL,
+
     IN,
     NOT_IN,
+
     BETWEEN,
     NOT_BETWEEN,
+
     LIKE,
-    NOT_LIKE
+    NOT_LIKE,
+
+    IS_NULL,
+    IS_NOT_NULL
 };
 
 // ============================================================
@@ -32,7 +39,8 @@ enum class ComparisonOperator
 enum class LiteralType
 {
     NUMBER,
-    STRING
+    STRING,
+    NULL_VALUE
 };
 
 // ============================================================
@@ -44,6 +52,10 @@ struct Literal
     LiteralType type = LiteralType::STRING;
     std::string value;
 };
+
+// ============================================================
+// Condition Types
+// ============================================================
 
 enum class ConditionType
 {
@@ -65,6 +77,7 @@ struct Condition
     ConditionType type = ConditionType::COMPARISON;
 
     std::string column;
+
     ComparisonOperator op = ComparisonOperator::EQUAL;
 
     Literal value;

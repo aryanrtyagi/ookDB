@@ -11,6 +11,7 @@
 #include <cmath>
 #include <sstream>
 #include <limits>
+#include <functional>
 
 static DataType parseDataType(const std::string &name)
 {
@@ -39,6 +40,7 @@ static DataType parseDataType(const std::string &name)
 
 static std::string valueToString(const Value &value)
 {
+    if (value.isNull()) return "NULL";
     switch (value.getType())
     {
     case DataType::INT:
@@ -54,6 +56,9 @@ static std::string valueToString(const Value &value)
     case DataType::BOOLEAN:
         return value.asBool() ? "TRUE" : "FALSE";
 
+    case DataType::NULL_VALUE:
+        return "NULL";
+
     case DataType::VARCHAR:
         return value.asString();
     }
@@ -63,6 +68,8 @@ static std::string valueToString(const Value &value)
 
 static int compareValues(const Value &a, const Value &b)
 {
+    if (a.isNull() || b.isNull())
+        return a.isNull() == b.isNull() ? 0 : (a.isNull() ? -1 : 1);
     if (a.getType() != b.getType())
         throw std::runtime_error("Cannot compare values of different types");
 
@@ -79,6 +86,8 @@ static int compareValues(const Value &a, const Value &b)
                                                                               : 0;
     case DataType::BOOLEAN:
         return a.asBool() == b.asBool() ? 0 : (a.asBool() ? 1 : -1);
+    case DataType::NULL_VALUE:
+        return 0;
     }
     return 0;
 }
@@ -201,10 +210,16 @@ Value Executor::convertLiteral(
     const Literal &literal,
     DataType expectedType)
 {
+    if (literal.type == LiteralType::NULL_VALUE)
+        return Value::null();
+
     try
     {
         switch (expectedType)
         {
+        case DataType::NULL_VALUE:
+            return Value::null();
+
         case DataType::INT:
         {
             std::size_t pos = 0;
@@ -267,125 +282,91 @@ bool Executor::evaluateCondition(
     const Schema &schema,
     const Condition &condition)
 {
-    if (condition.type == ConditionType::AND)
-        return condition.left && condition.right &&
-               evaluateCondition(row, schema, *condition.left) &&
-               evaluateCondition(row, schema, *condition.right);
-
-    if (condition.type == ConditionType::OR)
-        return condition.left && condition.right &&
-               (evaluateCondition(row, schema, *condition.left) ||
-                evaluateCondition(row, schema, *condition.right));
-
-    if (condition.type == ConditionType::NOT)
-        return condition.left &&
-               !evaluateCondition(row, schema, *condition.left);
-
-    int index = resolveColumnIndex(schema, condition.column);
-
-    if (index < 0)
-        throw std::runtime_error(
-            "Column does not exist: " + condition.column);
-
-    const Value &actual = row.getValue(index);
-    DataType type = schema.getColumn(index).getType();
-
-    auto convert = [&](const Literal &literal)
-    {
-        return convertLiteral(literal, type);
+    enum class Truth { FALSE_VALUE, TRUE_VALUE, UNKNOWN };
+    auto negate = [](Truth value) {
+        if (value == Truth::UNKNOWN) return Truth::UNKNOWN;
+        return value == Truth::TRUE_VALUE ? Truth::FALSE_VALUE : Truth::TRUE_VALUE;
     };
 
-    auto compare = [&](const Value &a, const Value &b) -> int
-    {
-        if (a.getType() != b.getType())
-            throw std::runtime_error("Comparison type mismatch");
-
-        switch (a.getType())
-        {
-        case DataType::INT:
-            return a.asInt() < b.asInt() ? -1 : a.asInt() > b.asInt() ? 1
-                                                                      : 0;
-
-        case DataType::DOUBLE:
-            return a.asDouble() < b.asDouble() ? -1 : a.asDouble() > b.asDouble() ? 1
-                                                                                  : 0;
-
-        case DataType::VARCHAR:
-            return a.asString() < b.asString() ? -1 : a.asString() > b.asString() ? 1
-                                                                                  : 0;
-
-        case DataType::BOOLEAN:
-            return a.asBool() == b.asBool() ? 0 : a.asBool() ? 1
-                                                             : -1;
+    std::function<Truth(const Condition&)> eval = [&](const Condition &c) -> Truth {
+        if (c.type == ConditionType::AND) {
+            if (!c.left || !c.right) throw std::runtime_error("Invalid AND condition");
+            Truth a = eval(*c.left), b = eval(*c.right);
+            if (a == Truth::FALSE_VALUE || b == Truth::FALSE_VALUE) return Truth::FALSE_VALUE;
+            if (a == Truth::UNKNOWN || b == Truth::UNKNOWN) return Truth::UNKNOWN;
+            return Truth::TRUE_VALUE;
+        }
+        if (c.type == ConditionType::OR) {
+            if (!c.left || !c.right) throw std::runtime_error("Invalid OR condition");
+            Truth a = eval(*c.left), b = eval(*c.right);
+            if (a == Truth::TRUE_VALUE || b == Truth::TRUE_VALUE) return Truth::TRUE_VALUE;
+            if (a == Truth::UNKNOWN || b == Truth::UNKNOWN) return Truth::UNKNOWN;
+            return Truth::FALSE_VALUE;
+        }
+        if (c.type == ConditionType::NOT) {
+            if (!c.left) throw std::runtime_error("Invalid NOT condition");
+            return negate(eval(*c.left));
         }
 
-        return 0;
+        int index = resolveColumnIndex(schema, c.column);
+        if (index < 0) throw std::runtime_error("Column does not exist: " + c.column);
+        const Value &actual = row.getValue(index);
+        if (c.op == ComparisonOperator::IS_NULL)
+            return actual.isNull() ? Truth::TRUE_VALUE : Truth::FALSE_VALUE;
+        if (c.op == ComparisonOperator::IS_NOT_NULL)
+            return actual.isNull() ? Truth::FALSE_VALUE : Truth::TRUE_VALUE;
+        if (actual.isNull()) return Truth::UNKNOWN;
+
+        DataType type = schema.getColumn(index).getType();
+        auto convert = [&](const Literal &literal) { return convertLiteral(literal, type); };
+        auto cmpValues = [&](const Value &a, const Value &b) -> int {
+            if (a.isNull() || b.isNull()) throw std::runtime_error("NULL cannot be ordered");
+            if (a.getType() != b.getType()) throw std::runtime_error("Comparison type mismatch");
+            return compareValues(a, b);
+        };
+
+        if (c.op == ComparisonOperator::IN || c.op == ComparisonOperator::NOT_IN) {
+            bool found = false, sawNull = false;
+            for (const Literal &literal : c.values) {
+                Value candidate = convert(literal);
+                if (candidate.isNull()) { sawNull = true; continue; }
+                if (cmpValues(actual, candidate) == 0) found = true;
+            }
+            if (found) return c.op == ComparisonOperator::IN ? Truth::TRUE_VALUE : Truth::FALSE_VALUE;
+            if (sawNull) return Truth::UNKNOWN;
+            return c.op == ComparisonOperator::IN ? Truth::FALSE_VALUE : Truth::TRUE_VALUE;
+        }
+        if (c.op == ComparisonOperator::BETWEEN || c.op == ComparisonOperator::NOT_BETWEEN) {
+            Value lowValue = convert(c.value), highValue = convert(c.secondValue);
+            if (lowValue.isNull() || highValue.isNull()) return Truth::UNKNOWN;
+            bool inside = cmpValues(actual, lowValue) >= 0 && cmpValues(actual, highValue) <= 0;
+            bool answer = c.op == ComparisonOperator::BETWEEN ? inside : !inside;
+            return answer ? Truth::TRUE_VALUE : Truth::FALSE_VALUE;
+        }
+        if (c.op == ComparisonOperator::LIKE || c.op == ComparisonOperator::NOT_LIKE) {
+            if (type != DataType::VARCHAR) throw std::runtime_error("LIKE requires a VARCHAR column");
+            bool matched = likeMatch(actual.asString(), c.value.value);
+            if (c.op == ComparisonOperator::NOT_LIKE) matched = !matched;
+            return matched ? Truth::TRUE_VALUE : Truth::FALSE_VALUE;
+        }
+
+        Value expected = convert(c.value);
+        if (expected.isNull()) return Truth::UNKNOWN;
+        int cmp = cmpValues(actual, expected);
+        bool answer = false;
+        switch (c.op) {
+            case ComparisonOperator::EQUAL: answer = cmp == 0; break;
+            case ComparisonOperator::NOT_EQUAL: answer = cmp != 0; break;
+            case ComparisonOperator::GREATER: answer = cmp > 0; break;
+            case ComparisonOperator::LESS: answer = cmp < 0; break;
+            case ComparisonOperator::GREATER_EQUAL: answer = cmp >= 0; break;
+            case ComparisonOperator::LESS_EQUAL: answer = cmp <= 0; break;
+            default: throw std::runtime_error("Unsupported comparison operator");
+        }
+        return answer ? Truth::TRUE_VALUE : Truth::FALSE_VALUE;
     };
 
-    if (condition.op == ComparisonOperator::IN ||
-        condition.op == ComparisonOperator::NOT_IN)
-    {
-        bool found = false;
-
-        for (const Literal &literal : condition.values)
-            if (compare(actual, convert(literal)) == 0)
-                found = true;
-
-        return condition.op == ComparisonOperator::IN
-                   ? found
-                   : !found;
-    }
-
-    if (condition.op == ComparisonOperator::BETWEEN ||
-        condition.op == ComparisonOperator::NOT_BETWEEN)
-    {
-        int low = compare(actual, convert(condition.value));
-        int high = compare(actual, convert(condition.secondValue));
-
-        bool inside = low >= 0 && high <= 0;
-
-        return condition.op == ComparisonOperator::BETWEEN
-                   ? inside
-                   : !inside;
-    }
-
-    if (condition.op == ComparisonOperator::LIKE ||
-        condition.op == ComparisonOperator::NOT_LIKE)
-    {
-        if (type != DataType::VARCHAR)
-            throw std::runtime_error("LIKE requires a VARCHAR column");
-
-        bool matched = likeMatch(
-            actual.asString(),
-            condition.value.value);
-
-        return condition.op == ComparisonOperator::LIKE
-                   ? matched
-                   : !matched;
-    }
-
-    Value expected = convert(condition.value);
-    int cmp = compare(actual, expected);
-
-    switch (condition.op)
-    {
-    case ComparisonOperator::EQUAL:
-        return cmp == 0;
-    case ComparisonOperator::NOT_EQUAL:
-        return cmp != 0;
-    case ComparisonOperator::GREATER:
-        return cmp > 0;
-    case ComparisonOperator::LESS:
-        return cmp < 0;
-    case ComparisonOperator::GREATER_EQUAL:
-        return cmp >= 0;
-    case ComparisonOperator::LESS_EQUAL:
-        return cmp <= 0;
-    default:
-        break;
-    }
-
-    throw std::runtime_error("Unsupported comparison operator");
+    return eval(condition) == Truth::TRUE_VALUE;
 }
 
 QueryResult Executor::executeInsert(const InsertQuery &query)
@@ -435,6 +416,8 @@ QueryResult Executor::executeInsert(const InsertQuery &query)
                 if (it == indexManagers.end())
                     throw std::runtime_error("Index manager not loaded");
 
+                if (row.getValue(column).isNull())
+                    throw std::runtime_error("Indexed columns cannot contain NULL");
                 int64_t key = row.getValue(column).asInt();
 
                 if (!it->second->insert(key, rid))
@@ -528,7 +511,7 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
                 const Value &x = left.getValue(leftIndex);
                 const Value &y = right.getValue(rightIndex);
                 bool equal = false;
-                if (x.getType() == y.getType())
+                if (!x.isNull() && !y.isNull() && x.getType() == y.getType())
                 {
                     switch (x.getType())
                     {
@@ -544,6 +527,9 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
                     case DataType::BOOLEAN:
                         equal = x.asBool() == y.asBool();
                         break;
+                    case DataType::NULL_VALUE:
+                        equal = false;
+                        break;
                     }
                 }
                 if (!equal)
@@ -558,11 +544,15 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
                 joinedRows.push_back(std::move(merged));
             }
 
-            // Value has no NULL state. Do not fake NULL using 0/false/"".
             if (!matchedRight && join.leftJoin)
-                throw std::runtime_error(
-                    "LEFT JOIN unmatched rows require NULL support in Value; "
-                    "matched LEFT JOIN rows are supported.");
+            {
+                Row merged;
+                for (int i = 0; i < schema.size(); ++i)
+                    merged.addValue(left.getValue(i));
+                for (int i = 0; i < rightSchema.size(); ++i)
+                    merged.addValue(Value::null());
+                joinedRows.push_back(std::move(merged));
+            }
         }
         sourceRows = std::move(joinedRows);
         schema = std::move(joinedSchema);
@@ -778,7 +768,17 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
 
                 if (column.aggregate == AggregateType::COUNT)
                 {
-                    output.emplace_back(static_cast<int>(rows.size()));
+                    if (column.isStar)
+                        output.emplace_back(static_cast<int>(rows.size()));
+                    else
+                    {
+                        int countIndex = resolveColumnIndex(schema, column.name);
+                        if (countIndex < 0) throw std::runtime_error("Unknown COUNT column: " + column.name);
+                        int count = 0;
+                        for (const Row &row : rows)
+                            if (!row.getValue(countIndex).isNull()) ++count;
+                        output.emplace_back(count);
+                    }
                     continue;
                 }
 
@@ -792,13 +792,17 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
                     throw std::runtime_error(
                         "Unknown aggregate column: " + column.name);
 
-                if (rows.empty())
+                std::vector<const Value*> nonNullValues;
+                for (const Row &row : rows)
+                    if (!row.getValue(index).isNull())
+                        nonNullValues.push_back(&row.getValue(index));
+                if (nonNullValues.empty())
                 {
-                    output.emplace_back(0);
+                    output.emplace_back(Value::null());
                     continue;
                 }
 
-                const Value &first = rows.front().getValue(index);
+                const Value &first = *nonNullValues.front();
 
                 if (first.getType() == DataType::VARCHAR)
                 {
@@ -809,10 +813,9 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
 
                     std::string chosen = first.asString();
 
-                    for (const Row &row : rows)
+                    for (const Value *value : nonNullValues)
                     {
-                        const std::string &current =
-                            row.getValue(index).asString();
+                        const std::string &current = value->asString();
 
                         if (column.aggregate == AggregateType::MIN)
                             chosen = std::min(chosen, current);
@@ -828,10 +831,12 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
                 double minValue = std::numeric_limits<double>::max();
                 double maxValue = std::numeric_limits<double>::lowest();
 
-                for (const Row &row : rows)
+                for (const Value *valuePtr : nonNullValues)
                 {
-                    const Value &value = row.getValue(index);
+                    const Value &value = *valuePtr;
 
+                    if (value.getType() != DataType::INT && value.getType() != DataType::DOUBLE)
+                        throw std::runtime_error("Numeric aggregate requires INT or DOUBLE");
                     double number =
                         value.getType() == DataType::INT
                             ? value.asInt()
@@ -849,7 +854,7 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
                     break;
 
                 case AggregateType::AVG:
-                    output.emplace_back(sum / rows.size());
+                    output.emplace_back(sum / nonNullValues.size());
                     break;
 
                 case AggregateType::MIN:
@@ -990,39 +995,60 @@ QueryResult Executor::executeSelect(const SelectQuery &query)
 QueryResult Executor::executeUpdate(const UpdateQuery &query)
 {
     QueryResult result;
-
     GenericTable table = openTable(query.tableName);
     const Schema &schema = table.getSchema();
-
     int columnIndex = schema.getColumnIndex(query.column);
+    if (columnIndex < 0) throw std::runtime_error("Unknown column: " + query.column);
 
-    if (columnIndex < 0)
-        throw std::runtime_error("Unknown column: " + query.column);
-
-    Value newValue = convertLiteral(
-        query.value,
-        schema.getColumn(columnIndex).getType());
+    Value newValue = convertLiteral(query.value, schema.getColumn(columnIndex).getType());
+    std::vector<const IndexMetadata*> affectedIndexes;
+    for (const IndexMetadata &metadata : catalog.getIndexes())
+        if (metadata.tableName == query.tableName)
+            affectedIndexes.push_back(&metadata);
 
     for (const RecordId &rid : table.getAllRecordIds())
     {
         Row oldRow = table.get(rid);
-
-        if (query.hasCondition &&
-            !evaluateCondition(oldRow, schema, query.condition))
-            continue;
+        if (query.hasCondition && !evaluateCondition(oldRow, schema, query.condition)) continue;
 
         Row newRow;
-
         for (int i = 0; i < schema.size(); ++i)
-            newRow.addValue(
-                i == columnIndex ? newValue : oldRow.getValue(i));
+            newRow.addValue(i == columnIndex ? newValue : oldRow.getValue(i));
 
-        if (!table.updateRow(rid, newRow))
-            throw std::runtime_error("Could not update row");
-
+        struct IndexChange { IndexManager *manager; int64_t oldKey; int64_t newKey; bool erased; bool inserted; };
+        std::vector<IndexChange> changes;
+        try
+        {
+            for (const IndexMetadata *metadata : affectedIndexes)
+            {
+                int idx = schema.getColumnIndex(metadata->columnName);
+                if (idx < 0 || schema.getColumn(idx).getType() != DataType::INT)
+                    throw std::runtime_error("Invalid indexed column metadata");
+                if (idx != columnIndex) continue;
+                if (oldRow.getValue(idx).isNull() || newRow.getValue(idx).isNull())
+                    throw std::runtime_error("Indexed columns cannot contain NULL");
+                auto manager = indexManagers.find(metadata->indexName);
+                if (manager == indexManagers.end()) throw std::runtime_error("Index manager not loaded");
+                IndexChange change{manager->second.get(), oldRow.getValue(idx).asInt(), newRow.getValue(idx).asInt(), false, false};
+                if (!change.manager->erase(change.oldKey, rid)) throw std::runtime_error("Could not remove old index entry");
+                change.erased = true;
+                changes.push_back(change);
+                if (!change.manager->insert(change.newKey, rid)) throw std::runtime_error("Could not insert new index entry");
+                changes.back().inserted = true;
+            }
+            if (!table.updateRow(rid, newRow)) throw std::runtime_error("Could not update row");
+        }
+        catch (...)
+        {
+            for (auto it = changes.rbegin(); it != changes.rend(); ++it)
+            {
+                if (it->inserted) it->manager->erase(it->newKey, rid);
+                if (it->erased) it->manager->insert(it->oldKey, rid);
+            }
+            throw;
+        }
         ++result.affectedRows;
     }
-
     result.message = "UPDATE completed.";
     return result;
 }
@@ -1030,24 +1056,40 @@ QueryResult Executor::executeUpdate(const UpdateQuery &query)
 QueryResult Executor::executeDelete(const DeleteQuery &query)
 {
     QueryResult result;
-
     GenericTable table = openTable(query.tableName);
     const Schema &schema = table.getSchema();
 
     for (const RecordId &rid : table.getAllRecordIds())
     {
         Row row = table.get(rid);
+        if (query.hasCondition && !evaluateCondition(row, schema, query.condition)) continue;
 
-        if (query.hasCondition &&
-            !evaluateCondition(row, schema, query.condition))
-            continue;
-
-        if (!table.deleteRow(rid))
-            throw std::runtime_error("Could not delete row");
-
+        struct RemovedIndex { IndexManager *manager; int64_t key; };
+        std::vector<RemovedIndex> removed;
+        try
+        {
+            for (const IndexMetadata &metadata : catalog.getIndexes())
+            {
+                if (metadata.tableName != query.tableName) continue;
+                int idx = schema.getColumnIndex(metadata.columnName);
+                if (idx < 0) throw std::runtime_error("Invalid indexed column metadata");
+                const Value &value = row.getValue(idx);
+                if (value.isNull()) continue;
+                auto manager = indexManagers.find(metadata.indexName);
+                if (manager == indexManagers.end()) throw std::runtime_error("Index manager not loaded");
+                int64_t key = value.asInt();
+                if (!manager->second->erase(key, rid)) throw std::runtime_error("Could not remove index entry");
+                removed.push_back({manager->second.get(), key});
+            }
+            if (!table.deleteRow(rid)) throw std::runtime_error("Could not delete row");
+        }
+        catch (...)
+        {
+            for (const RemovedIndex &entry : removed) entry.manager->insert(entry.key, rid);
+            throw;
+        }
         ++result.affectedRows;
     }
-
     result.message = "DELETE completed.";
     return result;
 }
@@ -1107,6 +1149,10 @@ QueryResult Executor::executeCreateIndex(const CreateIndexQuery &query)
 
 QueryResult Executor::execute(const Query &query)
 {
+    // Database loads catalog metadata after constructing the executor.
+    // Refresh here so persisted indexes are available on the first query.
+    loadIndexManagers();
+
     switch (query.type)
     {
     case QueryType::CREATE_INDEX:
@@ -1145,13 +1191,45 @@ QueryResult Executor::execute(const Query &query)
     }
 
     case QueryType::SHOW_TABLES:
+    {
+        QueryResult result;
+        result.columns = {"Tables"};
+        for (const std::string &name : catalog.listTables())
+            result.rows.push_back({Value(name)});
+        result.affectedRows = static_cast<int>(result.rows.size());
+        result.message = "SHOW TABLES completed.";
+        return result;
+    }
+
     case QueryType::DESCRIBE:
+    {
+        QueryResult result;
+        const Schema &schema = catalog.getSchema(query.describe.tableName);
+        result.columns = {"Field", "Type"};
+        for (int i = 0; i < schema.size(); ++i)
+        {
+            const Column &column = schema.getColumn(i);
+            std::string type;
+            switch (column.getType())
+            {
+                case DataType::INT: type = "INT"; break;
+                case DataType::DOUBLE: type = "DOUBLE"; break;
+                case DataType::BOOLEAN: type = "BOOLEAN"; break;
+                case DataType::VARCHAR: type = "VARCHAR"; break;
+                case DataType::NULL_VALUE: type = "NULL"; break;
+            }
+            result.rows.push_back({Value(column.getName()), Value(type)});
+        }
+        result.affectedRows = static_cast<int>(result.rows.size());
+        result.message = "DESCRIBE completed.";
+        return result;
+    }
+
     case QueryType::DROP_TABLE:
+        throw std::runtime_error("DROP TABLE is not safe yet: Catalog and page-chain deallocation must be implemented together.");
+
     case QueryType::ALTER_TABLE:
-        throw std::runtime_error(
-            "This DDL operation needs matching Catalog support. "
-            "Parser support is present, but storage/catalog mutation "
-            "has not been implemented.");
+        throw std::runtime_error("ALTER TABLE is not safe yet: existing serialized records require a schema migration.");
     }
 
     throw std::runtime_error("Unsupported query type");
