@@ -11,6 +11,7 @@
 #include <set>
 #include <cmath>
 #include <sstream>
+#include <limits>
 
 static DataType parseDataType(const std::string& name)
 {
@@ -85,6 +86,33 @@ static bool likeMatch(
     return i < text.size() &&
            text[i] == pattern[j] &&
            likeMatch(text, pattern, i + 1, j + 1);
+}
+
+
+static int resolveColumnIndex(const Schema& schema, const std::string& name)
+{
+    int exact = schema.getColumnIndex(name);
+    if (exact >= 0) return exact;
+
+    std::size_t requestedDot = name.rfind('.');
+    std::string requestedPlain = requestedDot == std::string::npos
+        ? name : name.substr(requestedDot + 1);
+
+    int found = -1;
+    for (int i = 0; i < schema.size(); ++i)
+    {
+        const std::string& candidate = schema.getColumn(i).getName();
+        std::size_t dot = candidate.rfind('.');
+        std::string plain = dot == std::string::npos
+            ? candidate : candidate.substr(dot + 1);
+        if (plain == requestedPlain)
+        {
+            if (found >= 0)
+                throw std::runtime_error("Ambiguous column: " + name);
+            found = i;
+        }
+    }
+    return found;
 }
 
 Executor::Executor(
@@ -213,7 +241,7 @@ bool Executor::evaluateCondition(
         return condition.left &&
             !evaluateCondition(row, schema, *condition.left);
 
-    int index = schema.getColumnIndex(condition.column);
+    int index = resolveColumnIndex(schema, condition.column);
 
     if (index < 0)
         throw std::runtime_error(
@@ -388,15 +416,103 @@ QueryResult Executor::executeInsert(const InsertQuery& query)
 
 QueryResult Executor::executeSelect(const SelectQuery& query)
 {
-    if (!query.joins.empty())
-        throw std::runtime_error(
-            "JOIN execution requires a combined-row schema. "
-            "The current storage Row represents one table only."
-        );
-
     QueryResult result;
     GenericTable table = openTable(query.tableName);
-    const Schema& schema = table.getSchema();
+    const Schema& baseSchema = table.getSchema();
+
+    // Build an in-memory joined relation. Storage rows remain unchanged.
+    Schema schema;
+    for (int i = 0; i < baseSchema.size(); ++i)
+        schema.addColumn(query.tableName + "." +
+            baseSchema.getColumn(i).getName(),
+            baseSchema.getColumn(i).getType());
+
+    std::vector<Row> sourceRows;
+    for (const RecordId& rid : table.getAllRecordIds())
+    {
+        Row stored = table.get(rid);
+        Row combined;
+        for (int i = 0; i < baseSchema.size(); ++i)
+            combined.addValue(stored.getValue(i));
+        sourceRows.push_back(std::move(combined));
+    }
+
+    for (const JoinClause& join : query.joins)
+    {
+        GenericTable rightTable = openTable(join.tableName);
+        const Schema& rightSchema = rightTable.getSchema();
+
+        int leftIndex = resolveColumnIndex(schema, join.leftColumn);
+        int rightIndex = resolveColumnIndex(rightSchema, join.rightColumn);
+
+        if (leftIndex < 0 || rightIndex < 0)
+        {
+            int swappedLeft = resolveColumnIndex(schema, join.rightColumn);
+            int swappedRight = resolveColumnIndex(rightSchema, join.leftColumn);
+            if (swappedLeft >= 0 && swappedRight >= 0)
+            {
+                leftIndex = swappedLeft;
+                rightIndex = swappedRight;
+            }
+        }
+        if (leftIndex < 0)
+            throw std::runtime_error("Unknown JOIN left column: " + join.leftColumn);
+        if (rightIndex < 0)
+            throw std::runtime_error("Unknown JOIN right column: " + join.rightColumn);
+
+        std::vector<Row> rightRows;
+        for (const RecordId& rid : rightTable.getAllRecordIds())
+            rightRows.push_back(rightTable.get(rid));
+
+        Schema joinedSchema;
+        for (int i = 0; i < schema.size(); ++i)
+            joinedSchema.addColumn(schema.getColumn(i).getName(),
+                                   schema.getColumn(i).getType());
+        for (int i = 0; i < rightSchema.size(); ++i)
+            joinedSchema.addColumn(join.tableName + "." +
+                rightSchema.getColumn(i).getName(),
+                rightSchema.getColumn(i).getType());
+
+        std::vector<Row> joinedRows;
+        for (const Row& left : sourceRows)
+        {
+            bool matchedRight = false;
+            for (const Row& right : rightRows)
+            {
+                const Value& x = left.getValue(leftIndex);
+                const Value& y = right.getValue(rightIndex);
+                bool equal = false;
+                if (x.getType() == y.getType())
+                {
+                    switch (x.getType())
+                    {
+                        case DataType::INT: equal = x.asInt() == y.asInt(); break;
+                        case DataType::DOUBLE: equal = x.asDouble() == y.asDouble(); break;
+                        case DataType::VARCHAR: equal = x.asString() == y.asString(); break;
+                        case DataType::BOOLEAN: equal = x.asBool() == y.asBool(); break;
+                    }
+                }
+                if (!equal) continue;
+
+                matchedRight = true;
+                Row merged;
+                for (int i = 0; i < schema.size(); ++i)
+                    merged.addValue(left.getValue(i));
+                for (int i = 0; i < rightSchema.size(); ++i)
+                    merged.addValue(right.getValue(i));
+                joinedRows.push_back(std::move(merged));
+            }
+
+            // Value has no NULL state. Do not fake NULL using 0/false/"".
+            if (!matchedRight && join.leftJoin)
+                throw std::runtime_error(
+                    "LEFT JOIN unmatched rows require NULL support in Value; "
+                    "matched LEFT JOIN rows are supported."
+                );
+        }
+        sourceRows = std::move(joinedRows);
+        schema = std::move(joinedSchema);
+    }
 
     std::vector<int> selected;
 
@@ -411,7 +527,7 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
         {
             for (const std::string& name : query.columns)
             {
-                int index = schema.getColumnIndex(name);
+                int index = resolveColumnIndex(schema, name);
 
                 if (index < 0)
                     throw std::runtime_error("Unknown column: " + name);
@@ -442,7 +558,7 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
                 continue;
             }
 
-            int index = schema.getColumnIndex(column.name);
+            int index = resolveColumnIndex(schema, column.name);
 
             if (index < 0)
                 throw std::runtime_error("Unknown column: " + column.name);
@@ -464,41 +580,17 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
 
     std::vector<SourceRow> matched;
 
-    for (const RecordId& rid : table.getAllRecordIds())
+    for (const Row& row : sourceRows)
     {
-        Row row = table.get(rid);
-
         if (query.hasCondition &&
             !evaluateCondition(row, schema, query.condition))
             continue;
 
         SourceRow item;
         item.row = row;
-
         for (int index : selected)
             item.projected.push_back(row.getValue(index));
-
         matched.push_back(std::move(item));
-    }
-
-    // DISTINCT
-    if (query.distinct)
-    {
-        std::set<std::string> seen;
-        std::vector<SourceRow> uniqueRows;
-
-        for (auto& item : matched)
-        {
-            std::string key;
-
-            for (const Value& value : item.projected)
-                key += valueToString(value) + '\x1f';
-
-            if (seen.insert(key).second)
-                uniqueRows.push_back(std::move(item));
-        }
-
-        matched = std::move(uniqueRows);
     }
 
     // GROUP BY and aggregate execution
@@ -510,17 +602,11 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
 
     if (!query.groupBy.empty() || hasAggregate)
     {
-        if (query.hasHaving)
-            throw std::runtime_error(
-                "HAVING currently requires aggregate alias evaluation "
-                "which is not represented in Condition."
-            );
-
         std::vector<int> groupIndexes;
 
         for (const std::string& name : query.groupBy)
         {
-            int index = schema.getColumnIndex(name);
+            int index = resolveColumnIndex(schema, name);
 
             if (index < 0)
                 throw std::runtime_error("Unknown GROUP BY column: " + name);
@@ -582,7 +668,7 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
             {
                 if (column.aggregate == AggregateType::NONE)
                 {
-                    int index = schema.getColumnIndex(column.name);
+                    int index = resolveColumnIndex(schema, column.name);
 
                     if (index < 0)
                         throw std::runtime_error(
@@ -607,7 +693,7 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
                         "Only COUNT(*) supports aggregate star"
                     );
 
-                int index = schema.getColumnIndex(column.name);
+                int index = resolveColumnIndex(schema, column.name);
 
                 if (index < 0)
                     throw std::runtime_error(
@@ -689,6 +775,30 @@ QueryResult Executor::executeSelect(const SelectQuery& query)
             }
 
             result.rows.push_back(std::move(output));
+        }
+
+        // HAVING evaluates against the aggregate output schema. Use selected
+        // aggregate aliases (for example: SELECT COUNT(*) AS total ... HAVING total > 2).
+        if (query.hasHaving)
+        {
+            Schema havingSchema;
+            for (std::size_t i = 0; i < result.columns.size(); ++i)
+            {
+                DataType type = result.rows.empty()
+                    ? DataType::INT : result.rows.front()[i].getType();
+                havingSchema.addColumn(result.columns[i], type);
+            }
+
+            std::vector<std::vector<Value>> filtered;
+            for (const auto& values : result.rows)
+            {
+                Row aggregateRow;
+                for (const Value& value : values)
+                    aggregateRow.addValue(value);
+                if (evaluateCondition(aggregateRow, havingSchema, query.having))
+                    filtered.push_back(values);
+            }
+            result.rows = std::move(filtered);
         }
     }
     else
