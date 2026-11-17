@@ -9,13 +9,17 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-# Ensure Python searches the project root before the backend directory.
-if PROJECT_ROOT in sys.path:
-    sys.path.remove(PROJECT_ROOT)
+# Always prioritize the latest compiled native extension.
+BUILD_DIRECTORY = os.path.join(PROJECT_ROOT, "build")
+
+for path in (BUILD_DIRECTORY, PROJECT_ROOT):
+    if path in sys.path:
+        sys.path.remove(path)
 
 sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, BUILD_DIRECTORY)
 
-# Import the verified root-level native extension.
+# Import the freshly built native extension.
 import arydb
 
 DATABASE_DIRECTORY = os.path.join(
