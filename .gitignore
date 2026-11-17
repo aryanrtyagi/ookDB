@@ -1,12 +1,38 @@
-# Build files
-*.exe
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# C++ build artifacts
+*.obj
 *.o
+*.exe
+*.dll
+*.lib
+*.exp
+/build/
+cmake-build-*/
 
-# Database files
+# Frontend
+node_modules/
+dist/
+
+# Local databases and indexes
 *.db
+*.sqlite3
+*.idx
 
-# VS Code
+# Runtime and test data
+arydb_*_test/
+
+# IDE
 .vscode/
+.idea/
 
 # Temporary files
 *.tmp

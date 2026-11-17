@@ -4,28 +4,31 @@ import sys
 import atexit
 import threading
 
-# Resolve the AryDB project root.
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-# Always prioritize the latest compiled native extension.
 BUILD_DIRECTORY = os.path.join(PROJECT_ROOT, "build")
 
+# Prefer the freshly built project-root extension locally.
+# If it is absent, Python can still find the installed Linux extension.
 for path in (BUILD_DIRECTORY, PROJECT_ROOT):
     if path in sys.path:
         sys.path.remove(path)
 
-sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, BUILD_DIRECTORY)
+sys.path.insert(0, PROJECT_ROOT)
 
-# Import the freshly built native extension.
 import arydb
 
-DATABASE_DIRECTORY = os.path.join(
-    PROJECT_ROOT,
-    "arydb_runtime_test"
+
+# Local default; Render will supply ARYDB_DATA_DIR.
+DATABASE_DIRECTORY = os.getenv(
+    "ARYDB_DATA_DIR",
+    os.path.join(PROJECT_ROOT, "arydb_runtime_test"),
 )
+
+os.makedirs(DATABASE_DIRECTORY, exist_ok=True)
 
 _manager = None
 _manager_pid = None
@@ -39,9 +42,7 @@ def get_database_manager():
 
     with _manager_lock:
         if _manager is None or _manager_pid != current_pid:
-            _manager = arydb.DatabaseManager(
-                DATABASE_DIRECTORY
-            )
+            _manager = arydb.DatabaseManager(DATABASE_DIRECTORY)
             _manager_pid = current_pid
 
         return _manager
@@ -75,10 +76,8 @@ def close_database():
     with _manager_lock:
         if _manager is not None:
             manager = _manager
-
             _manager = None
             _manager_pid = None
-
             manager.close()
 
 
