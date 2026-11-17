@@ -1,218 +1,265 @@
-
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import "./App.css";
 import { useDatabase } from "./hooks/useDatabase";
-import QueryHistory from "./components/QueryHistory";
+
+function formatExecutionTime(startedAt, finishedAt) {
+  return `${((finishedAt - startedAt) / 1000).toFixed(3)} s`;
+}
+
+function QueryOutput({ entry }) {
+  const result = entry.result;
+
+  return (
+    <section className="workbench-entry">
+      <div className="workbench-command">
+        <span className="terminal-prompt">arydb&gt;</span>
+        <pre className="terminal-sql">{entry.sql}</pre>
+      </div>
+
+      {entry.success ? (
+        <div className="workbench-response success-response">
+          <div className="response-status">
+            <span className="response-icon">✓</span>
+            <span>{result?.message || "Query executed successfully."}</span>
+            <span className="response-time">{entry.executionTime}</span>
+          </div>
+
+          {result?.columns?.length > 0 && result?.rows?.length > 0 ? (
+            <div className="workbench-result-table-wrap">
+              <table className="workbench-result-table">
+                <thead>
+                  <tr>
+                    {result.columns.map((column, index) => (
+                      <th key={`${column}-${index}`}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((value, columnIndex) => (
+                        <td key={columnIndex} className={value === null ? "null-value" : ""}>
+                          {value === null ? "NULL" : String(value)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="result-row-count">
+                {result.rows.length} {result.rows.length === 1 ? "row" : "rows"} returned
+              </div>
+            </div>
+          ) : (
+            <div className="response-detail">
+              {result?.affected_rows ?? 0} rows affected.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="workbench-response error-response">
+          <div className="response-status">
+            <span className="response-icon">×</span>
+            <strong>Error:</strong>
+            <span>{entry.error}</span>
+            <span className="response-time">{entry.executionTime}</span>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function App() {
-  const { isConnected, loading, error, runQuery } = useDatabase();
+  const { isConnected, loading, error, runQuery, checkConnection } = useDatabase();
 
   const [sql, setSql] = useState("");
-  const [queryResult, setQueryResult] = useState(null);
-  const [queryError, setQueryError] = useState("");
-  const [queryHistory, setQueryHistory] = useState([]);
+  const [entries, setEntries] = useState([]);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [selectedTable, setSelectedTable] = useState("");
 
-  const handleExecute = async () => {
-    if (!sql.trim() || loading || !isConnected) return;
+  const latestStatus = useMemo(() => {
+    if (loading) return "Executing query...";
+    if (!isConnected) return error || "Engine offline";
+    return "Ready";
+  }, [loading, isConnected, error]);
 
+  const executeQuery = async () => {
     const executedSql = sql.trim();
+    if (!executedSql || loading || !isConnected) return;
 
-    setQueryResult(null);
-    setQueryError("");
+    const startedAt = performance.now();
+    setSql("");
 
     try {
       const result = await runQuery(executedSql);
-
-      setQueryResult(result);
-
-      setQueryHistory((previous) => [
+      const finishedAt = performance.now();
+      setEntries((current) => [
+        ...current,
         {
-          id: Date.now(),
+          id: `${Date.now()}-${current.length}`,
           sql: executedSql,
-          timestamp: new Date().toLocaleString(),
+          result,
           success: true,
+          executionTime: formatExecutionTime(startedAt, finishedAt),
+          timestamp: new Date().toLocaleTimeString(),
         },
-        ...previous,
       ]);
-    } catch (err) {
-      setQueryError(err.message || "Query execution failed.");
-
-      setQueryHistory((previous) => [
+    } catch (queryError) {
+      const finishedAt = performance.now();
+      setEntries((current) => [
+        ...current,
         {
-          id: Date.now(),
+          id: `${Date.now()}-${current.length}`,
           sql: executedSql,
-          timestamp: new Date().toLocaleString(),
+          error: queryError.message || "Query execution failed.",
           success: false,
+          executionTime: formatExecutionTime(startedAt, finishedAt),
+          timestamp: new Date().toLocaleTimeString(),
         },
-        ...previous,
       ]);
     }
   };
 
-  const loadPreviousQuery = (previousSql) => {
-    setSql(previousSql);
+  const handleEditorKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      executeQuery();
+    }
   };
 
-  const clearHistory = () => {
-    setQueryHistory([]);
+  const loadHistoryEntry = (entry) => {
+    setSql(entry.sql);
+    setShowHistory(false);
   };
 
   return (
-    <div className="app">
+    <div className="app arydb-app">
       <header className="topbar">
         <div className="brand">
           <div className="brand-logo">A</div>
-          <div>
-            <h2>AryDB</h2>
-            <span>DATABASE STUDIO</span>
+          <div className="brand-copy">
+            <h2>AryDB Studio</h2>
+            <span>Custom Relational Database Engine</span>
           </div>
         </div>
 
-        <div
-          className={`connection-status ${
-            isConnected ? "online" : "offline"
-          }`}
-        >
-          <span className="status-dot"></span>
+        <div className="topbar-center">SQL Workbench</div>
+
+        <div className={`connection-status ${isConnected ? "online" : "offline"}`}>
+          <span className="status-dot" />
           {isConnected ? "Engine Online" : "Engine Offline"}
         </div>
       </header>
 
-      <main className="main-layout">
-        <aside className="sidebar">
-          <h4>WORKSPACE</h4>
-
-          <div className="nav-item active">
-            <span>⌘</span> SQL Editor
-          </div>
-
-          <div className="nav-item">
-            <span>▤</span> Tables
-          </div>
-
-          <div className="nav-item">
-            <span>◷</span> Query History
-          </div>
-
-          <div className="sidebar-bottom">
-            <span>ARYDB ENGINE</span>
-            <p>C++ Database Engine</p>
-            <p>Version 1.0</p>
-          </div>
-        </aside>
-
-        <section className="workspace">
-          <div className="welcome">
-            <p className="eyebrow">DATABASE WORKSPACE</p>
-            <h1>SQL Editor</h1>
-            <p>Write and execute queries using AryDB.</p>
-          </div>
-
-          <div className="editor-panel">
-            <div className="panel-header">
-              <span>QUERY EDITOR</span>
-              <span>SQL</span>
+      <main className={`main-layout workbench-layout ${!leftOpen ? "left-collapsed" : ""} ${!rightOpen ? "right-collapsed" : ""}`}>
+        {leftOpen && (
+          <aside className="explorer-panel side-panel">
+            <div className="side-panel-heading">
+              <h3>Database Explorer</h3>
+              <button className="icon-button" onClick={checkConnection} title="Refresh connection" aria-label="Refresh connection">↻</button>
             </div>
+            <div className="explorer-search">
+              <span>⌕</span>
+              <span>Search databases or tables</span>
+            </div>
+            <div className="panel-empty-state">
+              <span className="panel-empty-icon">▤</span>
+              <strong>Database explorer</strong>
+              <p>Database and table navigation will appear here once the explorer API is connected.</p>
+            </div>
+          </aside>
+        )}
 
-            <textarea
-              value={sql}
-              onChange={(e) => setSql(e.target.value)}
-              placeholder="Write your SQL query here..."
-              spellCheck="false"
-            />
-
-            <div className="editor-footer">
-              <span>
-                {loading
-                  ? "Executing query..."
-                  : queryError || error
-                    ? "Query failed"
-                    : "Ready to execute"}
-              </span>
-
-              <button
-                onClick={handleExecute}
-                disabled={!sql.trim() || loading || !isConnected}
-              >
-                {loading ? "Executing..." : "▶ Execute Query"}
-              </button>
+        <section className="workspace workbench-workspace">
+          <div className="workbench-toolbar">
+            <div className="toolbar-left">
+              <button className="icon-button panel-toggle" onClick={() => setLeftOpen((open) => !open)} title={leftOpen ? "Hide database explorer" : "Show database explorer"} aria-label="Toggle database explorer">{leftOpen ? "◧" : "▤"}</button>
+              <span className="workbench-title">SQL Workbench</span>
+              <button className="icon-button panel-toggle" onClick={() => setRightOpen((open) => !open)} title={rightOpen ? "Hide table inspector" : "Show table inspector"} aria-label="Toggle table inspector">{rightOpen ? "◨" : "▣"}</button>
+            </div>
+            <div className="toolbar-actions">
+              <button className="toolbar-button" onClick={() => setEntries([])} disabled={entries.length === 0}>Clear</button>
+              <button className={`toolbar-button ${showHistory ? "active" : ""}`} onClick={() => setShowHistory((visible) => !visible)}>History ({entries.length})</button>
             </div>
           </div>
 
-          <div className="results-panel">
-            <div className="panel-header">
-              <span>QUERY RESULTS</span>
-              <span>
-                {queryResult
-                  ? `${queryResult.rows?.length || 0} rows`
-                  : "No results"}
-              </span>
-            </div>
-
-            <div className="results-content">
-              {queryError ? (
-                <div className="query-error">
-                  <h3>Query Error</h3>
-                  <p>{queryError}</p>
-                </div>
-              ) : queryResult ? (
-                <>
-                  {queryResult.message && (
-                    <p className="result-message">
-                      {queryResult.message}
-                    </p>
-                  )}
-
-                  {queryResult.columns?.length > 0 &&
-                  queryResult.rows?.length > 0 ? (
-                    <div className="table-wrapper">
-                      <table className="result-table">
-                        <thead>
-                          <tr>
-                            {queryResult.columns.map((column, index) => (
-                              <th key={index}>{column}</th>
-                            ))}
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {queryResult.rows.map((row, rowIndex) => (
-                            <tr key={rowIndex}>
-                              {row.map((value, colIndex) => (
-                                <td key={colIndex}>
-                                  {value === null ? "NULL" : String(value)}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="empty-state">
-                      <h3>Query executed successfully</h3>
-                      <p>
-                        {queryResult.affected_rows ?? 0} rows affected.
-                      </p>
-                    </div>
-                  )}
-                </>
+          {showHistory && (
+            <div className="history-popover">
+              <div className="history-popover-heading">
+                <strong>Query History</strong>
+                <button className="icon-button" onClick={() => setShowHistory(false)} aria-label="Close history">×</button>
+              </div>
+              {entries.length === 0 ? (
+                <p className="history-empty-message">No executed queries yet.</p>
               ) : (
-                <div className="empty-state">
-                  <div className="empty-icon">⌘</div>
-                  <h3>No query executed</h3>
-                  <p>Your query results will appear here.</p>
+                <div className="history-popover-list">
+                  {[...entries].reverse().map((entry) => (
+                    <button className="history-popover-item" key={entry.id} onClick={() => loadHistoryEntry(entry)}>
+                      <span className={entry.success ? "history-success-mark" : "history-error-mark"}>{entry.success ? "✓" : "×"}</span>
+                      <span className="history-query-text">{entry.sql.replace(/\s+/g, " ")}</span>
+                      <span className="history-time-text">{entry.timestamp}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          <QueryHistory
-            history={queryHistory}
-            onSelect={loadPreviousQuery}
-            onClear={clearHistory}
-          />
+          <div className="terminal-panel" aria-label="AryDB SQL workbench">
+            <div className="terminal-intro">
+              <div>AryDB Interactive SQL Workbench</div>
+              <div>Engine status: <span className={isConnected ? "terminal-online" : "terminal-offline"}>{isConnected ? "Connected" : "Disconnected"}</span></div>
+            </div>
+
+            <div className="terminal-output" aria-live="polite">
+              {entries.map((entry) => <QueryOutput entry={entry} key={entry.id} />)}
+            </div>
+
+            <div className="terminal-input-row">
+              <span className="terminal-prompt">arydb&gt;</span>
+              <textarea
+                className="terminal-input"
+                value={sql}
+                onChange={(event) => setSql(event.target.value)}
+                onKeyDown={handleEditorKeyDown}
+                rows={1}
+                spellCheck="false"
+                aria-label="SQL command input"
+                disabled={!isConnected || loading}
+              />
+              {loading && <span className="terminal-running">Running...</span>}
+            </div>
+          </div>
+          <div className="workbench-statusbar">
+            <span className={isConnected ? "status-online-text" : "status-offline-text"}>● {latestStatus}</span>
+            <span>Enter: execute · Shift+Enter: new line</span>
+          </div>
         </section>
+
+        {rightOpen && (
+          <aside className="inspector-panel side-panel">
+            <div className="side-panel-heading">
+              <h3>Table Inspector</h3>
+              <button className="icon-button" onClick={() => setSelectedTable("")} title="Clear selected table" aria-label="Clear selected table">×</button>
+            </div>
+            {selectedTable ? (
+              <div className="inspector-selection">
+                <strong>{selectedTable}</strong>
+                <p>Schema and records can be inspected here when the corresponding backend endpoints are available.</p>
+                <button className="secondary-action" onClick={() => setSelectedTable("")}>Clear selection</button>
+              </div>
+            ) : (
+              <div className="panel-empty-state inspector-empty-state">
+                <span className="panel-empty-icon">▦</span>
+                <strong>No table selected</strong>
+                <p>Select a table from Database Explorer to inspect its schema. Records will remain hidden until you explicitly request them.</p>
+              </div>
+            )}
+          </aside>
+        )}
       </main>
     </div>
   );

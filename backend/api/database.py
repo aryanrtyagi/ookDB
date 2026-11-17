@@ -1,23 +1,30 @@
+
 import os
+import sys
 import atexit
 import threading
 
-import arydb
-
-
+# Resolve the AryDB project root.
 PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+# Ensure Python searches the project root before the backend directory.
+if PROJECT_ROOT in sys.path:
+    sys.path.remove(PROJECT_ROOT)
+
+sys.path.insert(0, PROJECT_ROOT)
+
+# Import the verified root-level native extension.
+import arydb
+
 DATABASE_DIRECTORY = os.path.join(
     PROJECT_ROOT,
-    "data",
-    "databases"
+    "arydb_runtime_test"
 )
 
 _manager = None
 _manager_pid = None
-
 _manager_lock = threading.RLock()
 
 
@@ -39,7 +46,17 @@ def get_database_manager():
 def execute_query(sql):
     with _manager_lock:
         manager = get_database_manager()
-        return manager.execute(sql)
+
+        print("SQL RECEIVED:", repr(sql))
+        print("DATABASE DIRECTORY:", DATABASE_DIRECTORY)
+        print("NATIVE MODULE:", arydb.__file__)
+        print("ACTIVE DATABASE:", manager.get_active_database_name())
+
+        result = manager.execute(sql)
+
+        print("ENGINE RESULT:", result)
+
+        return result
 
 
 def get_active_database_name():

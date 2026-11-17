@@ -19,6 +19,7 @@ namespace
     };
 }
 
+
 IndexManager::IndexManager(
     const std::string& filePath,
     size_t maxKeys
