@@ -4,7 +4,7 @@ services:
     name: arydb-api
     runtime: python
     region: singapore
-    plan: 1c-2g
+    plan: free
 
     buildCommand: |
       python -m pip install --upgrade pip
@@ -17,11 +17,6 @@ services:
 
     healthCheckPath: /api/health/
 
-    disk:
-      name: arydb-data
-      mountPath: /var/data
-      sizeGB: 1
-
     envVars:
       - key: DJANGO_DEBUG
         value: "False"
@@ -30,7 +25,7 @@ services:
         generateValue: true
 
       - key: ARYDB_DATA_DIR
-        value: /var/data/arydb
+        value: /tmp/arydb
 
       - key: DJANGO_DB_PATH
-        value: /var/data/django.sqlite3
+        value: /tmp/django.sqlite3
