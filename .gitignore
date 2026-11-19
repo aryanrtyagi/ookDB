@@ -36,3 +36,9 @@ arydb_*_test/
 
 # Temporary files
 *.tmp
+
+# Python packaging
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
